@@ -18,6 +18,8 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-012](#dr-012-stateless-backend-no-database) | Stateless backend, no database | Accepted |
 | [DR-013](#dr-013-continuous-risk-index-for-the-heatmap) | Continuous risk index for the heatmap | Accepted |
 | [DR-014](#dr-014-routes-without-a-forecast-rank-last) | Routes without a forecast rank last | Accepted |
+| [DR-015](#dr-015-guaranteeing-distinct-route-options) | Guaranteeing distinct route options | Accepted |
+| [DR-016](#dr-016-keep-the-api-key-out-of-logs) | Keep the API key out of logs | Accepted |
 
 ---
 
@@ -283,3 +285,43 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 **Why not penalize partial gaps too.** Ranking by "fewest unknown miles" first would let a route with 5 unforecast miles at the very end lose to a route with 50 known Severe miles. Showing the gap is more honest than guessing what it contains.
 
 **Tested.** Both cases are unit tests: the fully blind route ranks last, and a route with 30 unknown miles and 20 High miles still beats one with 10 Severe miles.
+
+---
+
+## DR-015: Guaranteeing distinct route options
+
+**Context.** The brief asks for 3 route options. Two lines on the map that follow the same road are not real options, so "3 routes" must mean 3 distinct routes.
+
+**Measuring overlap.** For two routes, the share of one route's points that lie within roughly 300 to 600 m of the other (grid-cell lookup, every 5th point). Calibrated on real TomTom output:
+
+| Pair | Overlap |
+|---|---|
+| Chicago to Denver, TomTom's 2 alternatives vs the fastest route | 0.03 to 0.13 |
+| Dallas to Atlanta, any two of 6 routes | at most 0.40 |
+| Chicago to Denver, routes of 1,007 and 1,019 mi (visually the same) | 0.75 / 0.81 |
+
+**Decision.** Two routes are duplicates if either shares 70% or more of its length with the other. Every genuine alternative measured stayed at or below 0.44, so the threshold has a wide margin.
+
+**Fallback when fewer than 3 distinct routes come back.** Request a route through a waypoint offset sideways from the fastest route's midpoint: 15% then 30% of the straight-line distance (clamped to 15 to 120 mi), left then right, at most 4 attempts. A candidate is kept only if it is distinct from every route so far and takes at most 1.6x the fastest route's time. Kept routes are labeled "via waypoint" in the UI. If no candidate qualifies, the app shows fewer routes and says why, instead of inventing fake options.
+
+**Load weight in routing.** The brief's load weight is cargo; TomTom's `vehicleWeight` is gross weight. We send cargo plus an assumed 35,000 lb tractor-trailer tare, capped at the 80,000 lb US federal limit, in kg. Weight-restricted roads are then avoided for heavy loads.
+
+**Live results (2026-10-21).**
+
+| Trip | Routes | Time | Notes |
+|---|---|---|---|
+| Chicago to Denver | 3 from TomTom | 3.2 s | max overlap 0.13 |
+| Dallas to Fort Worth | 3 from TomTom | 0.7 s | max overlap 0.38 |
+| Key West to Miami | 1 | 2.5 s | Only one road (US-1). One waypoint route rejoined US-1 and was rejected as a duplicate, three waypoints were unroutable (in the sea). Correctly returns 1 route |
+
+**Browser payload.** Routes are simplified with Douglas-Peucker at 25 m before being sent to the map: Chicago to Denver goes from 10,712 / 13,645 / 15,820 points to 816 / 1,004 / 1,305, in about 0.1 s per route. Checkpoints still use the full geometry.
+
+**Tests.** 18 client tests with mocked HTTP (no live calls in CI): request parameters, label formatting, URL encoding, multi-leg joining, duplicate replacement, unroutable and too-slow waypoints, the 1-route outcome, and error mapping (no route vs upstream failure vs timeout). 14 geometry tests for overlap, offsets and simplification.
+
+---
+
+## DR-016: Keep the API key out of logs
+
+**Found during the live test.** `httpx` logs every request at INFO as `HTTP Request: GET <full url>`, and TomTom takes its key as a query parameter. With Django's root logger at INFO, the key would be written to the container logs on every request.
+
+**Decision.** The `httpx` and `httpcore` loggers are set to WARNING. A test asserts they cannot log at INFO, and a live call afterwards produced 0 log lines containing the key.
