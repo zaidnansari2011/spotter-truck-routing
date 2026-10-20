@@ -6,6 +6,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import { INTERVALS, type IntervalKey, type Plan } from '../api/types.ts'
 import CheckpointTable from './CheckpointTable.tsx'
+import DepartureWindow from './DepartureWindow.tsx'
 import RecommendationSign from './RecommendationSign.tsx'
 import RouteList from './RouteList.tsx'
 import WhyPanel from './WhyPanel.tsx'
@@ -17,6 +18,8 @@ interface Props {
   onIntervalChange: (interval: IntervalKey) => void
   selectedId?: string
   onSelect: (id: string) => void
+  busy: boolean
+  onReplan: (departure: string) => void
 }
 
 export default function Results({
@@ -26,6 +29,8 @@ export default function Results({
   onIntervalChange,
   selectedId,
   onSelect,
+  busy,
+  onReplan,
 }: Props) {
   const ranking = plan.rankings[interval]
   const recommended = plan.routes.find((r) => r.id === ranking.recommended_id)!
@@ -70,6 +75,7 @@ export default function Results({
       </section>
 
       <WhyPanel ranking={ranking} />
+      <DepartureWindow advice={plan.departure_options[interval]} busy={busy} onReplan={onReplan} />
       <CheckpointTable route={selected} interval={interval} />
     </Stack>
   )

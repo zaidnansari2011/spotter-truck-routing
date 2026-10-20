@@ -70,6 +70,20 @@ class FakeWeather:
         return result
 
 
+class TimedWeather(FakeWeather):
+    """Weather that changes by the hour: `conditions(lat, lon, hour_ts) -> (wind, rain, snow)`."""
+
+    def hourly(self, cells, start_ts, end_ts):
+        start = math.floor(start_ts / HOUR_S) * HOUR_S
+        stamps = [start + k * HOUR_S for k in range(math.ceil((end_ts - start) / HOUR_S) + 1)]
+        result = {}
+        for lat, lon in cells:
+            rows = [self.conditions(lat, lon, ts) for ts in stamps]
+            wind, rain, snow = (list(column) for column in zip(*rows, strict=True))
+            result[(lat, lon)] = HourlySeries(start, wind, wind, rain, [0.0] * len(stamps), snow)
+        return result
+
+
 def body(**overrides):
     departure = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
     data = {

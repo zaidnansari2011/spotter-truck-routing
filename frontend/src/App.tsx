@@ -20,6 +20,7 @@ export default function App() {
   const [request, setRequest] = useState<PlanRequest>()
   const [interval, setSamplingInterval] = useState<IntervalKey>('25')
   const [selectedId, setSelectedId] = useState<string>()
+  const [formVersion, setFormVersion] = useState(0)
   const [map, setMap] = useState<MapLibreMap | null>(null)
   const [anchor, setAnchor] = useState<Anchor>('departure')
   const [nowStart, setNowStart] = useState<string>()
@@ -35,6 +36,12 @@ export default function App() {
     [plan.data, corridor.data, heatLayer],
   )
   const setHeatTime = useHeatLayer(map, heatFeatures, plan.data?.corridor.spacing_deg, heatLayer)
+
+  function replanAt(departure: string) {
+    if (!request) return
+    setFormVersion((v) => v + 1) // remount the form so it shows the new departure
+    findRoutes({ ...request, departure })
+  }
 
   function changeAnchor(next: Anchor) {
     if (next === 'now') setNowStart(new Date().toISOString())
@@ -78,7 +85,7 @@ export default function App() {
           travel time.
         </Typography>
 
-        <TripForm busy={plan.isPending} onSubmit={findRoutes} />
+        <TripForm key={formVersion} initial={request} busy={plan.isPending} onSubmit={findRoutes} />
 
         {plan.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -94,6 +101,8 @@ export default function App() {
             onIntervalChange={setSamplingInterval}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            busy={plan.isPending}
+            onReplan={replanAt}
           />
         )}
       </Box>

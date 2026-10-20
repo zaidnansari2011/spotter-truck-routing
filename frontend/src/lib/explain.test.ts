@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Ranking } from '../api/types.ts'
-import { recommendationHeadline } from './explain.ts'
+import type { DepartureOption, Ranking } from '../api/types.ts'
+import { advisorGain, recommendationHeadline } from './explain.ts'
 
 function ranking(overrides: Partial<Ranking> = {}): Ranking {
   return {
@@ -33,5 +33,32 @@ describe('recommendationHeadline', () => {
 
   it('handles a single route', () => {
     expect(recommendationHeadline(ranking({ comparisons: [] }))).toBe('The only route available')
+  })
+})
+
+describe('advisorGain', () => {
+  const option = (overrides: Partial<DepartureOption>): DepartureOption => ({
+    offset_h: 0,
+    departure: '2026-10-22T08:00:00Z',
+    route_id: 'A',
+    worst_level: 'Low',
+    no_travel_miles: 0,
+    severe_miles: 0,
+    high_miles: 0,
+    avg_risk: 0,
+    arrival: '2026-10-22T20:00:00Z',
+    ...overrides,
+  })
+
+  it('lists the risky miles that waiting avoids', () => {
+    const planned = option({ severe_miles: 42, high_miles: 10 })
+    expect(advisorGain(planned, option({}))).toBe('avoids 42 mi of Severe and 10 mi of High')
+  })
+
+  it('falls back to average risk when only that improves', () => {
+    const planned = option({ avg_risk: 0.8 })
+    expect(advisorGain(planned, option({ avg_risk: 0.45 }))).toBe(
+      'lowers the average risk from 0.80 to 0.45',
+    )
   })
 })

@@ -61,12 +61,30 @@ export interface Ranking {
   all_no_travel: boolean
 }
 
+export interface DepartureOption {
+  offset_h: number
+  departure: string
+  route_id: string
+  worst_level: LevelLabel | null
+  no_travel_miles: number
+  severe_miles: number
+  high_miles: number
+  avg_risk: number | null
+  arrival: string
+}
+
+export interface DepartureAdvice {
+  options: DepartureOption[]
+  suggestion: DepartureOption | null
+}
+
 export interface Plan {
   departure: string
   load_lb: number
   generated_at: string
   routes: RouteOption[]
   rankings: Record<IntervalKey, Ranking>
+  departure_options: Record<IntervalKey, DepartureAdvice>
   notices: string[]
   corridor: { points: [number, number][]; spacing_deg: number }
   assumptions: Record<string, unknown>

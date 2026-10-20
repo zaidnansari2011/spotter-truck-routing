@@ -22,6 +22,7 @@ const EXAMPLE: { origin: Place; destination: Place } = {
 interface Props {
   busy: boolean
   onSubmit: (request: PlanRequest) => void
+  initial?: PlanRequest // fills the form when a plan is re-run from the results
 }
 
 function nextQuarterHour(): Dayjs {
@@ -32,11 +33,13 @@ function nextQuarterHour(): Dayjs {
     .millisecond(0)
 }
 
-export default function TripForm({ busy, onSubmit }: Props) {
-  const [origin, setOrigin] = useState<Place | null>(null)
-  const [destination, setDestination] = useState<Place | null>(null)
-  const [departure, setDeparture] = useState<Dayjs | null>(nextQuarterHour)
-  const [load, setLoad] = useState('38000')
+export default function TripForm({ busy, onSubmit, initial }: Props) {
+  const [origin, setOrigin] = useState<Place | null>(initial?.origin ?? null)
+  const [destination, setDestination] = useState<Place | null>(initial?.destination ?? null)
+  const [departure, setDeparture] = useState<Dayjs | null>(() =>
+    initial ? dayjs(initial.departure) : nextQuarterHour(),
+  )
+  const [load, setLoad] = useState(initial ? String(initial.load_lb) : '38000')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   function validate(): Record<string, string> {

@@ -1,4 +1,5 @@
-import type { Ranking } from '../api/types.ts'
+import type { DepartureOption, Ranking } from '../api/types.ts'
+import { formatAvgRisk, formatMiles } from './format.ts'
 
 // The deciding criterion against the runner-up, in the driver's words.
 const HEADLINES: Record<string, string> = {
@@ -27,3 +28,19 @@ export const RANKING_RULES = [
   'Lowest average risk',
   'Shortest travel time',
 ]
+
+/** What waiting buys, e.g. "avoids 42 Severe miles and 10 High miles". */
+export function advisorGain(planned: DepartureOption, later: DepartureOption): string {
+  const parts: string[] = []
+  const levels: [keyof DepartureOption, string][] = [
+    ['no_travel_miles', 'No Travel'],
+    ['severe_miles', 'Severe'],
+    ['high_miles', 'High'],
+  ]
+  for (const [key, label] of levels) {
+    const saved = (planned[key] as number) - (later[key] as number)
+    if (saved > 0) parts.push(`${formatMiles(saved)} of ${label}`)
+  }
+  if (parts.length) return `avoids ${parts.join(' and ')}`
+  return `lowers the average risk from ${formatAvgRisk(planned.avg_risk)} to ${formatAvgRisk(later.avg_risk)}`
+}

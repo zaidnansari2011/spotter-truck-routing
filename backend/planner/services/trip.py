@@ -14,9 +14,16 @@ from functools import cache
 from django.conf import settings
 from django.core.cache import cache as django_cache
 
-from planner.domain.checkpoints import SAMPLING_INTERVALS_MI, Checkpoint, build_profile, place_checkpoints
+from planner.domain.advisor import ADVISOR_HOURS, RouteCheckpoints, departure_options, safer_departure
+from planner.domain.checkpoints import (
+    SAMPLING_INTERVALS_MI,
+    Checkpoint,
+    RouteProfile,
+    build_profile,
+    place_checkpoints,
+)
 from planner.domain.corridor import corridor_grid
-from planner.domain.forecast import weather_at
+from planner.domain.forecast import HOUR_S, weather_at
 from planner.domain.geo import LatLon, simplify
 from planner.domain.ranking import RouteScore, rank, score_route
 from planner.domain.risk import NO_TRAVEL_LOAD_LB, SEVERE_LOAD_LB, RiskLevel, assess
@@ -46,6 +53,7 @@ def openmeteo_client() -> OpenMeteoClient:
 @dataclass(frozen=True)
 class RouteSet:
     routes: list[RouteData]
+    profiles: list[RouteProfile]  # distance and driving time at every route point
     geometries: list[list[list[float]]]  # simplified [lon, lat] lines for the map
     corridor_points: list[LatLon]  # heatmap grid around all routes
     corridor_spacing_deg: float
@@ -63,7 +71,7 @@ def plan_trip(trip: TripRequest) -> dict:
     route_set = _routes(trip)
     routes = route_set.routes
     departure_ts = trip.departure.timestamp()
-    profiles = [build_profile(r.points, r.anchors, r.length_m, r.duration_s) for r in routes]
+    profiles = route_set.profiles
     checkpoints = {
         (i, interval): place_checkpoints(profile, interval, departure_ts)
         for i, profile in enumerate(profiles)
@@ -71,10 +79,11 @@ def plan_trip(trip: TripRequest) -> dict:
     }
 
     every_checkpoint = [c for cps in checkpoints.values() for c in cps]
+    # The window also covers later departures for the advisor (same grid cells, more hours).
     series = openmeteo_client().hourly(
         [snap(c.lat, c.lon) for c in every_checkpoint],
         departure_ts,
-        max(c.eta_ts for c in every_checkpoint),
+        max(c.eta_ts for c in every_checkpoint) + ADVISOR_HOURS[-1] * HOUR_S,
     )
 
     route_payloads = []
@@ -111,6 +120,18 @@ def plan_trip(trip: TripRequest) -> dict:
         "generated_at": _iso(datetime.now(timezone.utc).timestamp()),
         "routes": route_payloads,
         "rankings": {str(interval): _ranking(scores[interval]) for interval in SAMPLING_INTERVALS_MI},
+        "departure_options": {
+            str(interval): _departure_advice(
+                [
+                    RouteCheckpoints(ROUTE_IDS[i], profile.total_seconds, checkpoints[(i, interval)])
+                    for i, profile in enumerate(profiles)
+                ],
+                departure_ts,
+                series,
+                trip.load_lb,
+            )
+            for interval in SAMPLING_INTERVALS_MI
+        },
         "notices": _notices(routes),
         "corridor": {
             "points": [[lon, lat] for lat, lon in route_set.corridor_points],
@@ -136,7 +157,7 @@ def _routes(trip: TripRequest) -> RouteSet:
     """
     depart = "now" if trip.departure <= datetime.now(timezone.utc) else trip.departure.isoformat()
     raw_key = f"{trip.origin}|{trip.destination}|{depart}|{gross_weight_kg(trip.load_lb)}"
-    key = "routes:v3:" + hashlib.sha256(raw_key.encode()).hexdigest()
+    key = "routes:v4:" + hashlib.sha256(raw_key.encode()).hexdigest()
     cached = django_cache.get(key)
     if cached is None:
         routes = tomtom_client().route_options(trip.origin, trip.destination, trip.departure, trip.load_lb)
@@ -144,6 +165,7 @@ def _routes(trip: TripRequest) -> RouteSet:
         points, spacing = corridor_grid(simplified)
         cached = RouteSet(
             routes=routes,
+            profiles=[build_profile(r.points, r.anchors, r.length_m, r.duration_s) for r in routes],
             geometries=[[[round(lon, 5), round(lat, 5)] for lat, lon in line] for line in simplified],
             corridor_points=points,
             corridor_spacing_deg=spacing,
@@ -208,6 +230,54 @@ def _ranking(scores: list[RouteScore]) -> dict:
         },
         "all_no_travel": result.all_no_travel,
     }
+
+
+def _departure_advice(
+    routes: list[RouteCheckpoints], departure_ts: float, series: dict, load_lb: float
+) -> dict:
+    # The 10/25/50 mile sets share checkpoints and offsets shift by whole hours, so many
+    # (cell, time) lookups repeat; remembering them roughly halves the advisor's cost.
+    levels: dict[tuple[tuple[float, float], float], RiskLevel | None] = {}
+
+    def level_at(checkpoint: Checkpoint, eta_ts: float) -> RiskLevel | None:
+        key = (snap(checkpoint.lat, checkpoint.lon), eta_ts)
+        if key not in levels:
+            weather = weather_at(series[key[0]], eta_ts)
+            levels[key] = (
+                None
+                if weather is None
+                else assess(weather.wind_mph, weather.rain_in_hr, weather.snow_in_hr, load_lb).level
+            )
+        return levels[key]
+
+    options = departure_options(routes, departure_ts, level_at)
+    suggestion = safer_departure(options)
+
+    def payload(option) -> dict:
+        score = option.recommended
+        return {
+            "offset_h": option.offset_h,
+            "departure": _iso(option.departure_ts),
+            "route_id": score.route_id,
+            "worst_level": _worst_level(score),
+            "no_travel_miles": round(score.no_travel_miles, 1),
+            "severe_miles": round(score.severe_miles, 1),
+            "high_miles": round(score.high_miles, 1),
+            "avg_risk": None if score.avg_risk is None else round(score.avg_risk, 2),
+            "arrival": _iso(option.departure_ts + score.duration_s),
+        }
+
+    return {
+        "options": [payload(o) for o in options],
+        "suggestion": None if suggestion is None else payload(suggestion),
+    }
+
+
+def _worst_level(score: RouteScore) -> str | None:
+    if score.avg_risk is None:
+        return None
+    worst = max((level for level, miles in score.miles_by_level.items() if miles > 0), default=RiskLevel.LOW)
+    return worst.label
 
 
 def _notices(routes: list[RouteData]) -> list[str]:

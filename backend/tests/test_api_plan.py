@@ -7,7 +7,7 @@ from planner.api_errors import PlanThrottle
 from planner.domain.forecast import HOUR_S
 from planner.services.openmeteo import WeatherError
 from planner.services.tomtom import NoRouteError, TomTomError
-from tests.support import FakeTomTom, FakeWeather, body, post, route
+from tests.support import FakeTomTom, FakeWeather, TimedWeather, body, post, route
 
 
 def comparison_with(ranking, route_id):
@@ -273,3 +273,43 @@ def test_wrong_method_uses_the_same_error_shape():
 
     assert response.status_code == 405
     assert response.json()["code"] == "method_not_allowed"
+
+
+def _departure_ts(data):
+    return datetime.fromisoformat(data["departure"].replace("Z", "+00:00")).timestamp()
+
+
+def test_departure_options_cover_the_next_24_hours(fakes):
+    fakes()
+
+    data = post(body()).json()
+
+    advice = data["departure_options"]["25"]
+    assert [o["offset_h"] for o in advice["options"]] == list(range(25))
+    assert advice["options"][0]["route_id"] == data["rankings"]["25"]["recommended_id"]
+    assert advice["options"][0]["worst_level"] == "Low"
+    assert advice["suggestion"] is None  # calm weather: leaving now is already safest
+
+
+def test_advisor_suggests_waiting_out_a_storm_on_every_route(fakes):
+    holder = {}
+
+    def storm_for_six_hours(lat, lon, ts):
+        stormy = ts < holder["departure"] + 6 * HOUR_S
+        return (50.0, 0.0, 0.0) if stormy else (5.0, 0.0, 0.0)
+
+    fakes(weather=TimedWeather(storm_for_six_hours))
+    request = body()
+    holder["departure"] = datetime.fromisoformat(request["departure"]).timestamp()
+
+    data = post(request).json()
+
+    advice = data["departure_options"]["25"]
+    assert advice["options"][0]["worst_level"] == "Severe"
+    suggestion = advice["suggestion"]
+    assert suggestion["worst_level"] == "Low"
+    assert suggestion["severe_miles"] == 0
+    assert 6 <= suggestion["offset_h"] <= 7  # the first departure that misses the storm entirely
+    assert _departure_ts({"departure": suggestion["departure"]}) == pytest.approx(
+        _departure_ts(data) + suggestion["offset_h"] * HOUR_S
+    )
