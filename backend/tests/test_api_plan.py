@@ -346,3 +346,44 @@ def test_weather_rate_limit_is_a_clear_503(fakes):
 
     assert response.status_code == 503
     assert response.json()["code"] == "weather_busy"
+
+
+def _ts(iso):
+    return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+
+
+def test_rest_breaks_are_off_by_default(fakes):
+    fakes(tomtom=FakeTomTom(routes=[route(40, 20)]))
+
+    data = post(body()).json()
+
+    assert data["hos"] is False
+    assert data["routes"][0]["rest_s"] == 0
+    assert data["routes"][0]["duration_s"] == 20 * HOUR_S
+
+
+def test_rest_breaks_push_arrival_and_checkpoint_times(fakes):
+    fakes(tomtom=FakeTomTom(routes=[route(40, 20)]))
+
+    data = post(body(hos=True, interval_mi=10)).json()
+
+    r = data["routes"][0]
+    assert data["hos"] is True
+    assert r["driving_s"] == 20 * HOUR_S
+    assert r["rest_s"] == 11 * HOUR_S  # two 30 min breaks and one 10 h rest
+    assert _ts(r["arrival"]) - _ts(data["departure"]) == pytest.approx(31 * HOUR_S, abs=1)
+    elapsed = [_ts(c["eta"]) - _ts(data["departure"]) for c in r["checkpoints"]]
+    gaps = [b - a for a, b in zip(elapsed, elapsed[1:], strict=False)]
+    assert max(gaps) > 10 * HOUR_S  # the 10 hour rest sits between two checkpoints
+
+
+def test_rest_breaks_change_how_much_faster_a_route_is(fakes):
+    # Elapsed time grows with driving time, so the faster route stays faster. What changes is the
+    # gap: A (11.2 h) crosses the 11 h limit and needs a 10 h rest, B (10.9 h) only a 30 min break.
+    fakes(tomtom=FakeTomTom(routes=[route(40, 11.2), route(41, 10.9)]))
+
+    plain = post(body()).json()["ranking"]
+    rested = post(body(hos=True)).json()["ranking"]
+
+    assert plain["comparisons"][0]["reason"] == "Shortest travel time: 10 h 54 min vs 11 h 12 min on Route A"
+    assert rested["comparisons"][0]["reason"] == "Shortest travel time: 11 h 24 min vs 21 h 42 min on Route A"

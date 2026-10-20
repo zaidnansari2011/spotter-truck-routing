@@ -69,6 +69,7 @@ def plan(request: Request) -> Response:
             departure=data["departure"],
             load_lb=data["load_lb"],
             interval_mi=data["interval_mi"],
+            hos=data["hos"],
         )
     )
     return Response(result)

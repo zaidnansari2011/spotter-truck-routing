@@ -25,6 +25,8 @@ const ROUTE: RouteOption = {
   source: 'tomtom',
   distance_mi: 2 * DEG_MI,
   duration_s: 4 * 3600,
+  driving_s: 4 * 3600,
+  rest_s: 0,
   traffic_delay_s: 0,
   arrival: '2026-10-22T16:00:00Z',
   geometry: [

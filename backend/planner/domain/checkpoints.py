@@ -9,6 +9,7 @@ assuming one constant speed for the whole trip (docs/decisions.md, DR-003).
 from __future__ import annotations
 
 from bisect import bisect_left
+from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -111,7 +112,13 @@ def covered_miles(miles: list[float]) -> list[float]:
     return [hi - lo for lo, hi in pairwise(bounds)]
 
 
-def place_checkpoints(profile: RouteProfile, interval_miles: float, departure_ts: float) -> list[Checkpoint]:
+def place_checkpoints(
+    profile: RouteProfile,
+    interval_miles: float,
+    departure_ts: float,
+    clock: Callable[[float], float] | None = None,
+) -> list[Checkpoint]:
+    """Checkpoints with ETAs. `clock` maps driving time to elapsed time (e.g. adding rest breaks)."""
     miles = checkpoint_miles(profile.total_miles, interval_miles)
     coverage = covered_miles(miles)
     checkpoints = []
@@ -124,7 +131,7 @@ def place_checkpoints(profile: RouteProfile, interval_miles: float, departure_ts
                 lat=lat,
                 lon=lon,
                 elapsed_s=elapsed,
-                eta_ts=departure_ts + elapsed,
+                eta_ts=departure_ts + (clock(elapsed) if clock else elapsed),
                 covered_miles=covered,
             )
         )

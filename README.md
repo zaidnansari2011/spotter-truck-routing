@@ -18,6 +18,8 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 | All routes, checkpoints, risk levels, ETAs and summaries on a map | Route lines (the selected one colored by risk), checkpoint dots with arrival times, popups, and a summary chip per route |
 | Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button, and layers for risk, risk with load, wind, rain and snow |
 | Extra: best time to leave | Re-scores the routes for departures up to 24 hours later and suggests the safest one ([DR-022](docs/decisions.md#dr-022-departure-time-advisor)) |
+| Extra: trucks on the timeline | A marker per route moves with the forecast slider, so you can watch each truck meet the weather ([DR-024](docs/decisions.md#dr-024-trucks-on-the-timeline)) |
+| Extra: required rest breaks | Optional hours-of-service breaks added to arrival times, which changes the forecast at each checkpoint ([DR-025](docs/decisions.md#dr-025-hours-of-service-rest-breaks)) |
 
 ## How the recommendation is made
 
@@ -129,7 +131,7 @@ Run the tests with `cd backend && pytest` and `cd frontend && npm test`.
 
 ## Known limitations
 
-- Truck travel times are pure driving time. Mandatory rest breaks under the hours-of-service rules are not added.
+- Rest breaks are optional and model the daily hours-of-service limits only (8 h before a break, 11 h before 10 h off), not the weekly 60/70 hour limits.
 - Open-Meteo's free tier is for non-commercial use. A production deployment would use their commercial plan.
 - Place search covers the US and Canada, where the high-resolution HRRR model is available.
 - Grid spacing for the heatmap grows with trip length (about 45 km for Chicago to Denver) to keep it under 300 points.

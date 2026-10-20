@@ -51,8 +51,9 @@ export default function RecommendationSign({ route, ranking, destination }: Prop
           </Typography>
         </Box>
         <Typography component="p" sx={{ fontSize: '0.9375rem', mt: 0.25 }}>
-          {formatDuration(route.duration_s)}, arrives {formatClock(route.arrival)}{' '}
-          {timeZoneName(route.arrival)}
+          {formatDuration(route.duration_s)}
+          {route.rest_s > 0 && ` including ${formatDuration(route.rest_s)} of rest`}, arrives{' '}
+          {formatClock(route.arrival)} {timeZoneName(route.arrival)}
         </Typography>
         <Typography
           component="p"

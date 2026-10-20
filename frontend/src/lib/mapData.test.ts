@@ -39,6 +39,8 @@ function route(checkpoints: Checkpoint[], distance = 3 * DEG_MI): RouteOption {
     source: 'tomtom',
     distance_mi: distance,
     duration_s: 3600,
+    driving_s: 3600,
+    rest_s: 0,
     traffic_delay_s: 0,
     arrival: '2026-10-22T13:00:00Z',
     geometry: LINE,

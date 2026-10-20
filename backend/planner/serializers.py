@@ -27,6 +27,9 @@ class PlanRequestSerializer(serializers.Serializer):
     interval_mi = serializers.ChoiceField(
         choices=SAMPLING_INTERVALS_MI, default=25, help_text="Miles between weather checkpoints"
     )
+    hos = serializers.BooleanField(
+        default=False, help_text="Add hours-of-service rest breaks (30 min after 8 h, 10 h off after 11 h)"
+    )
 
     def validate_departure(self, value: datetime) -> datetime:
         # DRF makes naive input aware using TIME_ZONE, so check the raw text for an explicit offset.

@@ -97,3 +97,18 @@ def test_no_suggestion_when_later_is_only_faster_not_safer():
 
 def test_empty_options():
     assert safer_departure([]) is None
+
+
+def test_later_departures_keep_the_rest_breaks_in_arrival_times():
+    # A checkpoint reached after a rest has eta well beyond its driving time; shifts must use eta.
+    cps = checkpoints(2, 1)
+    rested = [cps[0], Checkpoint(**{**cps[1].__dict__, "eta_ts": DEPARTURE + 11 * HOUR_S})]
+    seen = []
+
+    def level_at(checkpoint, eta_ts):
+        seen.append(eta_ts - DEPARTURE)
+        return RiskLevel.LOW
+
+    departure_options([RouteCheckpoints("A", 11 * HOUR_S, rested)], DEPARTURE, level_at, offsets_h=[2])
+
+    assert seen == [2 * HOUR_S, 13 * HOUR_S]

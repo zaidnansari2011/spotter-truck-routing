@@ -69,7 +69,13 @@ export default function RouteList({ plan, selectedId, onSelect }: Props) {
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontWeight: 700 }}>
-                    {formatDuration(route.duration_s)}{' '}
+                    {formatDuration(route.duration_s)}
+                    {route.rest_s > 0 && (
+                      <Typography component="span" variant="body2" color="text.secondary">
+                        {' '}
+                        (incl. {formatDuration(route.rest_s)} rest)
+                      </Typography>
+                    )}{' '}
                     <Typography component="span" variant="body2" color="text.secondary">
                       {formatMiles(route.distance_mi)}, arrives {formatClock(route.arrival)}
                     </Typography>

@@ -155,3 +155,13 @@ def test_locating_past_the_end_clamps_to_the_destination():
 
     assert (lat, lon) == profile.points[-1]
     assert elapsed == profile.total_seconds
+
+
+def test_clock_turns_driving_time_into_elapsed_time():
+    profile = constant_speed_profile(100, mph=10)  # 10 hours of driving
+
+    plain = place_checkpoints(profile, 50, DEPARTURE_TS)
+    rested = place_checkpoints(profile, 50, DEPARTURE_TS, clock=lambda s: s * 2)
+
+    assert [c.elapsed_s for c in rested] == [c.elapsed_s for c in plain]  # driving time unchanged
+    assert rested[-1].eta_ts - DEPARTURE_TS == pytest.approx(2 * plain[-1].elapsed_s)

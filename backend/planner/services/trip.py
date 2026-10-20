@@ -25,6 +25,7 @@ from planner.domain.checkpoints import (
 from planner.domain.corridor import corridor_grid
 from planner.domain.forecast import HOUR_S, weather_at
 from planner.domain.geo import LatLon, simplify
+from planner.domain.hos import wall_clock
 from planner.domain.ranking import RouteScore, rank, score_route
 from planner.domain.risk import NO_TRAVEL_LOAD_LB, SEVERE_LOAD_LB, RiskLevel, assess
 from planner.services.openmeteo import OpenMeteoClient, snap
@@ -66,12 +67,15 @@ class TripRequest:
     departure: datetime
     load_lb: float
     interval_mi: int = 25
+    hos: bool = False  # add hours-of-service rest breaks to arrival times
 
 
 def plan_trip(trip: TripRequest) -> dict:
     route_set = _routes(trip)
     departure_ts = trip.departure.timestamp()
-    checkpoints = [place_checkpoints(p, trip.interval_mi, departure_ts) for p in route_set.profiles]
+    clock = wall_clock if trip.hos else None
+    checkpoints = [place_checkpoints(p, trip.interval_mi, departure_ts, clock) for p in route_set.profiles]
+    durations = [clock(p.total_seconds) if clock else p.total_seconds for p in route_set.profiles]
 
     every_checkpoint = [c for cps in checkpoints for c in cps]
     # The window also covers later departures for the advisor (same locations, more hours).
@@ -83,13 +87,13 @@ def plan_trip(trip: TripRequest) -> dict:
 
     route_payloads = []
     scores: list[RouteScore] = []
-    for i, (route, profile, geometry, cps) in enumerate(
-        zip(route_set.routes, route_set.profiles, route_set.geometries, checkpoints, strict=True)
+    for i, (route, profile, geometry, cps, duration) in enumerate(
+        zip(route_set.routes, route_set.profiles, route_set.geometries, checkpoints, durations, strict=True)
     ):
         assessed = [_assess_checkpoint(c, series, trip.load_lb) for c in cps]
         score = score_route(
             ROUTE_IDS[i],
-            profile.total_seconds,
+            duration,
             [(c.covered_miles, level) for c, (_, level) in zip(cps, assessed, strict=True)],
         )
         scores.append(score)
@@ -98,9 +102,11 @@ def plan_trip(trip: TripRequest) -> dict:
                 "id": ROUTE_IDS[i],
                 "source": route.source,
                 "distance_mi": round(profile.total_miles, 1),
-                "duration_s": round(profile.total_seconds),
+                "duration_s": round(duration),
+                "driving_s": round(profile.total_seconds),
+                "rest_s": round(duration - profile.total_seconds),
                 "traffic_delay_s": round(route.traffic_delay_s),
-                "arrival": _iso(departure_ts + profile.total_seconds),
+                "arrival": _iso(departure_ts + duration),
                 "geometry": geometry,
                 "checkpoints": [row for row, _ in assessed],
                 "summary": _summary(score),
@@ -111,13 +117,14 @@ def plan_trip(trip: TripRequest) -> dict:
         "departure": _iso(departure_ts),
         "load_lb": trip.load_lb,
         "interval_mi": trip.interval_mi,
+        "hos": trip.hos,
         "generated_at": _iso(datetime.now(timezone.utc).timestamp()),
         "routes": route_payloads,
         "ranking": _ranking(scores),
         "departure_options": _departure_advice(
             [
-                RouteCheckpoints(ROUTE_IDS[i], profile.total_seconds, cps)
-                for i, (profile, cps) in enumerate(zip(route_set.profiles, checkpoints, strict=True))
+                RouteCheckpoints(ROUTE_IDS[i], duration, cps)
+                for i, (duration, cps) in enumerate(zip(durations, checkpoints, strict=True))
             ],
             departure_ts,
             series,

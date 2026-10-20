@@ -49,7 +49,8 @@ def departure_options(
             score_route(
                 r.route_id,
                 r.duration_s,
-                [(c.covered_miles, level_at(c, start + c.elapsed_s)) for c in r.checkpoints],
+                # Shift by elapsed time since departure, which includes any rest breaks.
+                [(c.covered_miles, level_at(c, start + c.eta_ts - departure_ts)) for c in r.checkpoints],
             )
             for r in routes
         ]

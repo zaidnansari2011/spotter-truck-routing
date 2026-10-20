@@ -28,6 +28,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-022](#dr-022-departure-time-advisor) | Departure-time advisor | Accepted |
 | [DR-023](#dr-023-staying-inside-the-free-weather-quota) | Staying inside the free weather quota | Accepted (revises DR-018) |
 | [DR-024](#dr-024-trucks-on-the-timeline) | Trucks on the timeline | Accepted |
+| [DR-025](#dr-025-hours-of-service-rest-breaks) | Hours-of-service rest breaks | Accepted |
 
 ---
 
@@ -541,3 +542,19 @@ Real weather on the test day was calm everywhere (nothing reached Moderate), so 
 **Tests.** 4 unit tests: waiting before departure, following uneven arrival times (a quarter of the way after 30 minutes when the first half takes 1 hour), parking at the destination, and feature properties.
 
 **QA note.** An automated check first reported that slider keys were ignored right after loading. The cause was the test's text selector: "At departure" matched "plan th*at departure*" in the advisor text, so the test acted while the heatmap was still loading and the slider was correctly disabled. Scoped to the timeline, the slider responds as expected.
+
+---
+
+## DR-025: Hours-of-service rest breaks
+
+**Why.** A truck cannot drive Chicago to Denver in one 15 hour stretch. Federal hours-of-service rules for property-carrying drivers require a 30 minute break after 8 hours of driving and limit driving to 11 hours before 10 consecutive hours off duty. Rests move when the truck reaches each checkpoint, which changes the forecast it meets.
+
+**Model.** A driving day is 8 h driving, a 30 min break and 3 h driving (11.5 h on duty, inside the 14 hour window), followed by 10 h off if more driving remains. A rest is only added before more driving, so a trip of exactly 8 h or 11 h gets none. The 60/70 hour weekly limits are not modelled; one trip here does not approach them, and the driver's recent hours are unknown.
+
+**Where it applies.** It is a switch on the trip form, off by default so the core results match the brief. When on, checkpoint arrival times, the route's arrival, the travel time used for ranking and the departure advisor all use elapsed time including rests. Routes report driving time and rest time separately.
+
+**Effect on ranking, stated precisely.** Elapsed time always grows with driving time, so rests never change which route is faster. They change how much faster it is, and therefore the trade-off note: for 11.2 h vs 10.9 h of driving the gap grows from 18 minutes to over 10 hours, because only the longer route crosses the 11 hour limit. They also change which hour each checkpoint is reached, which can change the risk ranking itself.
+
+**Measured.** Chicago to Denver, 14.9 h of driving: "25 h 22 min including 10 h 30 min of rest, arrives Thu 4:52 AM" (one 30 minute break and one 10 hour rest).
+
+**Tests.** 13 rule tests (break and rest boundaries, multi-day trips, never decreasing), a checkpoint test (driving time unchanged, ETA uses the clock), an advisor test (later departures keep the rests), and 3 API tests (off by default, a 20 h drive arriving 31 h after departure with the rest between two checkpoints, and the widened time gap in the ranking reason).

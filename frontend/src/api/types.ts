@@ -40,7 +40,9 @@ export interface RouteOption {
   id: string
   source: 'tomtom' | 'via-waypoint'
   distance_mi: number
-  duration_s: number
+  duration_s: number // elapsed time, including rest breaks when they are on
+  driving_s: number
+  rest_s: number
   traffic_delay_s: number
   arrival: string
   geometry: [number, number][] // [lon, lat]
@@ -85,6 +87,7 @@ export interface Plan {
   generated_at: string
   routes: RouteOption[]
   interval_mi: number
+  hos: boolean
   ranking: Ranking
   departure_options: DepartureAdvice
   notices: string[]
@@ -97,6 +100,7 @@ export interface PlanRequest {
   destination: Place
   departure: string
   load_lb: number
+  hos?: boolean // add hours-of-service rest breaks
 }
 
 export type HeatLayer = 'risk' | 'risk_load' | 'wind' | 'rain' | 'snow'

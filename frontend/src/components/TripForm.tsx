@@ -3,9 +3,11 @@ import dayjs, { type Dayjs } from 'dayjs'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import InputAdornment from '@mui/material/InputAdornment'
 import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
+import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker'
@@ -40,6 +42,7 @@ export default function TripForm({ busy, onSubmit, initial }: Props) {
     initial ? dayjs(initial.departure) : nextQuarterHour(),
   )
   const [load, setLoad] = useState(initial ? String(initial.load_lb) : '38000')
+  const [hos, setHos] = useState(initial?.hos ?? false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   function validate(): Record<string, string> {
@@ -71,6 +74,7 @@ export default function TripForm({ busy, onSubmit, initial }: Props) {
       destination: destination!,
       departure: departure!.format(), // ISO 8601 with the viewer's UTC offset
       load_lb: Number(load),
+      hos,
     })
   }
 
@@ -117,6 +121,16 @@ export default function TripForm({ busy, onSubmit, initial }: Props) {
           }}
           type="number"
         />
+        <Box>
+          <FormControlLabel
+            control={<Switch checked={hos} onChange={(e) => setHos(e.target.checked)} />}
+            label="Add required rest breaks"
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: -0.5 }}>
+            Hours of service: a 30 minute break after 8 hours of driving and 10 hours off after 11.
+            Rests move arrival times, so the weather at each checkpoint changes too.
+          </Typography>
+        </Box>
         <Button
           type="submit"
           variant="contained"
