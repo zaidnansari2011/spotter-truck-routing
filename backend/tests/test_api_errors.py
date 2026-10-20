@@ -28,6 +28,7 @@ def test_django_exceptions_use_the_same_shape(exc, status, code):
     assert set(response.data) == {"code", "message"}
 
 
+@pytest.mark.real_client_factories
 def test_client_factories_build_configured_clients():
     trip.tomtom_client.cache_clear()
     trip.openmeteo_client.cache_clear()
@@ -41,6 +42,7 @@ def test_client_factories_build_configured_clients():
         trip.openmeteo_client.cache_clear()
 
 
+@pytest.mark.real_client_factories
 def test_missing_key_fails_loudly_when_first_used():
     trip.tomtom_client.cache_clear()
     try:

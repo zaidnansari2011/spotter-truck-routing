@@ -4,6 +4,7 @@ testpaths = ["tests"]
 addopts = "-q"
 # STATIC_ROOT is only populated by collectstatic in the Docker build.
 filterwarnings = ["ignore:No directory at:UserWarning"]
+markers = ["real_client_factories: exercises the real API client factories (no fakes installed)"]
 
 [tool.ruff]
 line-length = 110

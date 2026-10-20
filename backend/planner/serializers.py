@@ -45,3 +45,29 @@ class PlanRequestSerializer(serializers.Serializer):
 
 class SuggestQuerySerializer(serializers.Serializer):
     q = serializers.CharField(max_length=120, allow_blank=True)
+
+
+MAX_CORRIDOR_POINTS = 1_000
+
+
+class CorridorRequestSerializer(serializers.Serializer):
+    points = serializers.ListField(
+        child=serializers.ListField(child=serializers.FloatField(), min_length=2, max_length=2),
+        min_length=1,
+        max_length=MAX_CORRIDOR_POINTS,
+        help_text="Grid points as [lon, lat], as returned in the plan's corridor.points",
+    )
+    start = serializers.DateTimeField(help_text="Hour 0 of the slider, ISO 8601 with a UTC offset")
+    load_lb = serializers.FloatField(min_value=0, max_value=MAX_LOAD_LB)
+
+    def validate_points(self, value):
+        for lon, lat in value:
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                raise serializers.ValidationError("Each point must be [lon, lat] within valid ranges.")
+        return value
+
+    def validate_start(self, value: datetime) -> datetime:
+        now = datetime.now(timezone.utc)
+        if not now - timedelta(hours=1) <= value <= now + MAX_DEPARTURE_AHEAD:
+            raise serializers.ValidationError("Start must be between now and 7 days ahead.")
+        return value

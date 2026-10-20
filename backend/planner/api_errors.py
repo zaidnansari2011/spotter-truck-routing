@@ -29,6 +29,10 @@ class SuggestThrottle(IPRateThrottle):
     scope = "suggest"
 
 
+class CorridorThrottle(IPRateThrottle):
+    scope = "corridor"
+
+
 def api_exception_handler(exc, context):
     if isinstance(exc, NoRouteError):
         return _error(

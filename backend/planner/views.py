@@ -7,9 +7,14 @@ from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from planner.api_errors import PlanThrottle, SuggestThrottle
-from planner.serializers import PlaceSerializer, PlanRequestSerializer, SuggestQuerySerializer
-from planner.services import trip
+from planner.api_errors import CorridorThrottle, PlanThrottle, SuggestThrottle
+from planner.serializers import (
+    CorridorRequestSerializer,
+    PlaceSerializer,
+    PlanRequestSerializer,
+    SuggestQuerySerializer,
+)
+from planner.services import corridor, trip
 
 SUGGEST_CACHE_SECONDS = 24 * 3600
 
@@ -64,3 +69,31 @@ def plan(request: Request) -> Response:
         )
     )
     return Response(result)
+
+
+@extend_schema(
+    request=CorridorRequestSerializer,
+    responses=inline_serializer(
+        "CorridorFrames",
+        {
+            "hours": serializers.ListField(child=serializers.IntegerField()),
+            "risk": serializers.ListField(),
+            "risk_load": serializers.ListField(),
+            "wind": serializers.ListField(),
+            "rain": serializers.ListField(),
+            "snow": serializers.ListField(),
+        },
+    ),
+    description=(
+        "Hourly weather for the heatmap grid, hours 0 to 48 from `start`. One row per point, "
+        "one value per hour: risk x100, wind mph, rain and snow in hundredths of an inch per hour."
+    ),
+)
+@api_view(["POST"])
+@throttle_classes([CorridorThrottle])
+def corridor_weather(request: Request) -> Response:
+    body = CorridorRequestSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    data = body.validated_data
+    points = [(lat, lon) for lon, lat in data["points"]]
+    return Response(corridor.corridor_frames(points, data["start"].timestamp(), data["load_lb"]))

@@ -22,6 +22,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-016](#dr-016-keep-the-api-key-out-of-logs) | Keep the API key out of logs | Accepted |
 | [DR-017](#dr-017-forecast-batching-and-caching) | Forecast batching and caching | Accepted |
 | [DR-018](#dr-018-plan-api-design) | Plan API design | Accepted |
+| [DR-019](#dr-019-corridor-heatmap-data) | Corridor heatmap data | Accepted |
 
 ---
 
@@ -231,7 +232,9 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 | Covers | Tue 21:00 to Thu 21:00 | Thu 06:00 to Sat 06:00 |
 | Trip visible | First 15 h of 20 h | All of it |
 
-**Decision.** Hour 0 is the departure time, which is "now" by default. A Departure / Now toggle switches to hours from the current time. Every slider position shows the clock time and the forecast lead, e.g. "Thu 06:00, forecast +33 h". Both windows are fetched up front, so the toggle is instant.
+**Decision.** Hour 0 is the departure time, which is "now" by default. A Departure / Now toggle switches to hours from the current time. Every slider position shows the clock time and the forecast lead, e.g. "Thu 06:00, forecast +33 h".
+
+**Revised during implementation (DR-019).** The first plan fetched both windows up front so the toggle would be instant. For a departure days ahead that doubles the heatmap payload, and in the common case (leave now) the two windows are identical anyway. The toggle now makes one extra request, which is served from the forecast cache in about 0.2 s.
 
 ---
 
@@ -394,3 +397,35 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 | API key occurrences in server logs | 0 |
 
 **Tests.** 30 API tests with fake routing and weather clients: calm weather (fastest route wins), a planted storm on the fastest route (recommendation moves, trade-off note appears), the same storm with a 35,000 lb load (load rule turns it into No Travel), the 40,000 vs 40,001 lb threshold through the full API, missing forecasts, 1 and 2 route results, route caching, every validation rule, every error mapping, and the rate limit. The whole backend is at 100% branch coverage.
+
+---
+
+## DR-019: Corridor heatmap data
+
+**Grid.** Every point within 30 miles of any of the 3 routes, on a regular grid. Spacing is the finest multiple of 0.05 degrees that keeps the grid at or under 600 points, so grid points line up exactly with the forecast cache cells (DR-017) and fit in two Open-Meteo batches. Short trips get a fine grid (Dallas to Fort Worth), long trips a coarser one (Chicago to Denver: 425 points at 0.35 degrees, about 35 km).
+
+**How "within 30 miles" is computed.** Routes are densified to a sample every 5 km and bucketed in a spatial hash whose cells are at least 30 miles wide, so each grid point only checks its 9 neighboring buckets. Worst-case error is 2.5 km at the buffer edge. 140 ms for the 3 real Chicago to Denver routes.
+
+**Two requests instead of one.** The plan response carries the grid points (about 10 KB). The hourly frames come from a separate stateless `POST /api/corridor` (points, hour-0 time, load). Routes appear on the map as soon as the plan returns while the heatmap loads in parallel, and the Departure / Now slider toggle (DR-009) is just a second corridor request.
+
+**Payload format.** One row per grid point and one value per hour, for hours 0 to 48 (49 frames), as small integers:
+- `risk`: weather-only risk index x100 (0 to 400), the default "weather heatmap" layer
+- `risk_load`: the same with load rules applied, for the "Risk for this load" layer
+- `wind` in whole mph, `rain` and `snow` in hundredths of an inch per hour
+
+Values are floored, not rounded, so `floor(risk / 100)` always equals the discrete level shown at checkpoints (DR-013). Hours without a forecast are `null`, never 0.
+
+**Live results (Chicago to Denver, 38,000 lb, 2026-10-21).**
+
+| Measure | Value |
+|---|---|
+| Grid | 425 points, 0.35 degree spacing |
+| Values per response | 20,825 per layer (425 x 49), 0 nulls |
+| First request | 0.56 s |
+| Repeat request | 0.18 s |
+| Size | 252 KB, **48 KB gzipped** |
+| Weather on the day | Calm: max wind 21 mph, max rain 0.09 in/hr, no snow (max risk index 0.86, Low) |
+
+**Testing safeguard added.** The corridor service first imported the forecast client factory by name, so tests that swapped in a fake client still reached the live API without failing. Services now look the factory up through its module, and an autouse fixture makes every API test fail loudly if it touches a live client without installing fakes.
+
+**Tests.** 7 grid tests (buffer containment, full coverage along the route, spacing on the 0.05 degree lattice, the point cap, multiple routes) and 13 endpoint tests (frame count and timing, units, the load-adjusted layer differing exactly at 30,000 vs 30,001 lb, nulls, validation, rate limit). Backend total: 216 tests, 100% branch coverage.
