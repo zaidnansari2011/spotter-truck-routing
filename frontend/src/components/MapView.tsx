@@ -13,7 +13,7 @@ import {
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import Box from '@mui/material/Box'
 import type { IntervalKey, Plan } from '../api/types.ts'
-import { formatDuration } from '../lib/format.ts'
+import { formatDuration, formatMiles } from '../lib/format.ts'
 import {
   checkpointPoints,
   planBounds,
@@ -23,6 +23,7 @@ import {
 } from '../lib/mapData.ts'
 import { colorExpression, opacityExpression, radiusExpression } from '../lib/heatmap.ts'
 import { checkpointPopupHtml } from '../lib/popup.ts'
+import { worstLevel } from '../lib/risk.ts'
 import { fontFamily, tokens } from '../theme.ts'
 
 setWorkerUrl(workerUrl)
@@ -121,8 +122,13 @@ export default function MapView({
       chip.className = 'route-chip'
       chip.dataset.selected = String(route.id === selectedId)
       chip.dataset.recommended = String(route.id === recommendedId)
-      chip.setAttribute('aria-label', `Select route ${route.id}`)
-      chip.innerHTML = `<span class="route-chip-id">${route.id}</span>${formatDuration(route.duration_s)}`
+      const worst = worstLevel(route.intervals[interval].summary)
+      const summary = `${formatDuration(route.duration_s)}, ${formatMiles(route.distance_mi)}`
+      chip.setAttribute('aria-label', `Route ${route.id}: ${summary}, worst weather ${worst.label}`)
+      chip.title = `Worst weather on this route: ${worst.label}`
+      chip.innerHTML =
+        `<span class="route-chip-id">${route.id}</span>` +
+        `<span class="route-chip-risk" style="background:${worst.color}"></span>${summary}`
       chip.addEventListener('click', (event) => {
         event.stopPropagation()
         latest.current.onSelectRoute(route.id)
@@ -132,7 +138,7 @@ export default function MapView({
         .addTo(map)
     })
     return () => markers.forEach((m) => m.remove())
-  }, [map, plan, selectedId, recommendedId])
+  }, [map, plan, interval, selectedId, recommendedId])
 
   return (
     <Box sx={{ position: 'absolute', inset: 0, ...mapStyles }}>
@@ -274,6 +280,12 @@ const mapStyles = {
   },
   '& .route-chip[data-recommended="true"]': { background: tokens.signGreen },
   '& .route-chip[data-selected="true"]': { outline: `3px solid ${tokens.centerLine}` },
+  '& .route-chip-risk': {
+    width: '10px',
+    height: '10px',
+    borderRadius: '50%',
+    border: `1.5px solid ${tokens.laneWhite}`,
+  },
   '& .route-chip-id': {
     display: 'grid',
     placeItems: 'center',

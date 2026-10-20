@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatAvgRisk, formatDuration, formatMiles } from './format.ts'
-import { describeLevel, levelColor, LEVELS, NO_FORECAST } from './risk.ts'
+import { describeLevel, levelColor, LEVELS, NO_FORECAST, worstLevel } from './risk.ts'
 
 describe('formatDuration', () => {
   it.each([
@@ -49,5 +49,22 @@ describe('risk styles', () => {
     [null, [], 'No forecast for this time'],
   ] as const)('describes %s with %j', (label, factors, text) => {
     expect(describeLevel(label, [...factors])).toBe(text)
+  })
+})
+
+describe('worstLevel', () => {
+  const miles = (overrides: Partial<Record<string, number>>) => ({
+    miles_by_level: { Low: 100, Moderate: 0, High: 0, Severe: 0, 'No Travel': 0, ...overrides },
+    unknown_miles: 0,
+    avg_risk: 0,
+    do_not_travel: false,
+  })
+
+  it('picks the most severe level that has miles', () => {
+    expect(worstLevel(miles({ Moderate: 20, Severe: 5 })).label).toBe('Severe')
+  })
+
+  it('is Low for a calm route', () => {
+    expect(worstLevel(miles({})).label).toBe('Low')
   })
 })

@@ -1,4 +1,4 @@
-import type { LevelLabel } from '../api/types.ts'
+import type { LevelLabel, RouteSummary } from '../api/types.ts'
 
 export interface LevelStyle {
   label: LevelLabel
@@ -35,4 +35,9 @@ export function describeLevel(label: LevelLabel | null, factors: string[] = []):
   const joined =
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]
   return `${label} from ${joined}`
+}
+
+/** The most severe level with any miles on the route; Low when the whole route is calm. */
+export function worstLevel(summary: RouteSummary): LevelStyle {
+  return [...LEVELS].reverse().find((level) => summary.miles_by_level[level.label] > 0) ?? LEVELS[0]
 }
