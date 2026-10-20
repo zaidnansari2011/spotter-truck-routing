@@ -6,6 +6,13 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 
 ![Chicago to Denver: three truck routes, the recommended route as a guide sign, checkpoints with arrival times, and the forecast timeline](docs/images/app-desktop.png)
 
+<details>
+<summary>Demo mode: a simulated storm (labelled in the app) on the fastest route, with the recommendation moved to Route B</summary>
+
+![Demo mode with a simulated storm between Lincoln and Des Moines](docs/images/demo-storm.png)
+
+</details>
+
 ## What it does
 
 | The brief asks for | Where it is |
