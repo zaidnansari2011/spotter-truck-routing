@@ -2,7 +2,7 @@
 
 The grid covers everything within CORRIDOR_BUFFER_M of any route. Spacing is the finest multiple
 of 0.05 degrees that keeps the grid under MAX_GRID_POINTS, so points line up with the forecast
-cache cells (DR-017) and the request stays within one or two Open-Meteo batches.
+cache cells (DR-017) and the forecast request stays small.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from itertools import pairwise
 from .geo import EARTH_RADIUS_M, LatLon, haversine_m, lerp
 
 CORRIDOR_BUFFER_M = 48_000  # 30 miles either side of each route
-MAX_GRID_POINTS = 600
+MAX_GRID_POINTS = 300  # each point is one forecast request on the free tier (DR-023)
 MIN_SPACING_DEG = 0.05
 DENSIFY_STEP_M = 5_000  # route sample spacing for distance checks (max error 2.5 km)
 

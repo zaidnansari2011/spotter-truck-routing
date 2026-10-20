@@ -97,6 +97,7 @@ export default function DepartureWindow({ advice, busy, onReplan }: Props) {
               transform:
                 hour === 0 ? 'none' : hour === 24 ? 'translateX(-100%)' : 'translateX(-50%)',
               fontSize: '0.75rem',
+              whiteSpace: 'nowrap',
             }}
           >
             {hour === 0 ? 'Planned' : `+${hour} h`}

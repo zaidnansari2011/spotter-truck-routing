@@ -12,7 +12,7 @@ import {
 // Importing it with ?url makes Vite emit the file and gives us its final URL.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import Box from '@mui/material/Box'
-import type { IntervalKey, Plan } from '../api/types.ts'
+import type { Plan } from '../api/types.ts'
 import { formatDuration, formatMiles } from '../lib/format.ts'
 import {
   checkpointPoints,
@@ -36,7 +36,6 @@ const CHIP_POSITION: Record<string, number> = { A: 0.42, B: 0.55, C: 0.68 }
 
 interface Props {
   plan?: Plan
-  interval: IntervalKey
   selectedId?: string
   recommendedId?: string
   onSelectRoute: (id: string) => void
@@ -46,7 +45,6 @@ interface Props {
 
 export default function MapView({
   plan,
-  interval,
   selectedId,
   recommendedId,
   onSelectRoute,
@@ -56,10 +54,10 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null)
   const [map, setMap] = useState<MapLibreMap | null>(null)
   // Map event handlers are bound once; they read the latest props through this ref.
-  const latest = useRef({ plan, interval, selectedId, onSelectRoute })
+  const latest = useRef({ plan, selectedId, onSelectRoute })
   const readyCallback = useRef(onMapReady)
   useLayoutEffect(() => {
-    latest.current = { plan, interval, selectedId, onSelectRoute }
+    latest.current = { plan, selectedId, onSelectRoute }
     readyCallback.current = onMapReady
   })
 
@@ -96,9 +94,9 @@ export default function MapView({
     if (!map) return
     const selected = plan?.routes.find((r) => r.id === selectedId)
     source(map, 'routes').setData(plan && selectedId ? routeLines(plan, selectedId) : EMPTY)
-    source(map, 'risk').setData(selected ? riskSegments(selected, interval) : EMPTY)
-    source(map, 'checkpoints').setData(selected ? checkpointPoints(selected, interval) : EMPTY)
-  }, [map, plan, interval, selectedId])
+    source(map, 'risk').setData(selected ? riskSegments(selected) : EMPTY)
+    source(map, 'checkpoints').setData(selected ? checkpointPoints(selected) : EMPTY)
+  }, [map, plan, selectedId])
 
   // Frame all routes when a new plan arrives.
   useEffect(() => {
@@ -122,7 +120,7 @@ export default function MapView({
       chip.className = 'route-chip'
       chip.dataset.selected = String(route.id === selectedId)
       chip.dataset.recommended = String(route.id === recommendedId)
-      const worst = worstLevel(route.intervals[interval].summary)
+      const worst = worstLevel(route.summary)
       const summary = `${formatDuration(route.duration_s)}, ${formatMiles(route.distance_mi)}`
       chip.setAttribute('aria-label', `Route ${route.id}: ${summary}, worst weather ${worst.label}`)
       chip.title = `Worst weather on this route: ${worst.label}`
@@ -138,7 +136,7 @@ export default function MapView({
         .addTo(map)
     })
     return () => markers.forEach((m) => m.remove())
-  }, [map, plan, interval, selectedId, recommendedId])
+  }, [map, plan, selectedId, recommendedId])
 
   return (
     <Box sx={{ position: 'absolute', inset: 0, ...mapStyles }}>
@@ -236,7 +234,6 @@ function bindInteractions(
   latest: {
     current: {
       plan?: Plan
-      interval: IntervalKey
       selectedId?: string
       onSelectRoute: (id: string) => void
     }
@@ -251,10 +248,10 @@ function bindInteractions(
     if (id) latest.current.onSelectRoute(id)
   })
   map.on('click', 'checkpoint-dots', (event: MapLayerMouseEvent) => {
-    const { plan, interval, selectedId } = latest.current
+    const { plan, selectedId } = latest.current
     const route = plan?.routes.find((r) => r.id === selectedId)
     const index = event.features?.[0]?.properties?.index
-    const checkpoint = route?.intervals[interval].checkpoints[index]
+    const checkpoint = route?.checkpoints[index]
     if (!route || !checkpoint) return
     new Popup({ closeButton: true, maxWidth: '260px', offset: 10 })
       .setLngLat([checkpoint.lon, checkpoint.lat])

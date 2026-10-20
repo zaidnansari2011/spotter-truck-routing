@@ -25,6 +25,7 @@ BATCH_SIZE = 300  # 300 locations x 49 hours measured at 2.1 s and a 4.1 KB URL 
 MAX_WORKERS = 4
 MAX_FORECAST_DAYS = 16
 CACHE_SECONDS = 30 * 60  # models update hourly
+MINUTE_S = 60
 CACHE_VERSION = 1
 
 Cell = tuple[float, float]
@@ -32,6 +33,10 @@ Cell = tuple[float, float]
 
 class WeatherError(Exception):
     """Open-Meteo could not be reached or rejected the request."""
+
+
+class WeatherRateLimited(WeatherError):
+    """The free tier's request limit is used up (each location counts as one request, DR-023)."""
 
 
 @dataclass(frozen=True)
@@ -49,10 +54,13 @@ def snap(lat: float, lon: float) -> Cell:
 
 
 class OpenMeteoClient:
-    def __init__(self, http: httpx.Client | None = None, cache=default_cache, now=time.time):
+    def __init__(
+        self, http: httpx.Client | None = None, cache=default_cache, now=time.time, sleep=time.sleep
+    ):
         self._http = http or httpx.Client(timeout=TIMEOUT)
         self._cache = cache
         self._now = now
+        self._sleep = sleep
 
     def hourly(self, cells: Iterable[Cell], start_ts: float, end_ts: float) -> dict[Cell, HourlySeries]:
         """Hourly series covering [start_ts, end_ts] for each (already snapped) cell.
@@ -100,10 +108,13 @@ class OpenMeteoClient:
             "start_hour": _iso_hour(window.start_ts),
             "end_hour": _iso_hour(window.end_ts),
         }
-        try:
-            response = self._http.get(BASE_URL, params=params)
-        except httpx.HTTPError as exc:
-            raise WeatherError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
+        response = self._get(params)
+        if response.status_code == 429 and "Minutely" in _reason(response):
+            # The per-minute window resets on the minute; waiting once is better than failing.
+            self._sleep(MINUTE_S - self._now() % MINUTE_S + 1)
+            response = self._get(params)
+        if response.status_code == 429:
+            raise WeatherRateLimited(f"Open-Meteo rate limit: {_reason(response)}")
         if response.status_code != 200:
             raise WeatherError(f"Open-Meteo returned HTTP {response.status_code}: {_reason(response)}")
 
@@ -112,6 +123,12 @@ class OpenMeteoClient:
         if len(locations) != len(cells):
             raise WeatherError(f"Open-Meteo returned {len(locations)} locations for {len(cells)} requested")
         return {cell: _hours(location["hourly"]) for cell, location in zip(cells, locations, strict=True)}
+
+    def _get(self, params: dict) -> httpx.Response:
+        try:
+            return self._http.get(BASE_URL, params=params)
+        except httpx.HTTPError as exc:
+            raise WeatherError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
 
 
 def _hours(hourly: dict) -> dict[int, tuple]:

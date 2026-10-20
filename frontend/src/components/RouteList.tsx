@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
-import type { IntervalKey, Plan } from '../api/types.ts'
+import type { Plan } from '../api/types.ts'
 import { formatAvgRisk, formatClock, formatDuration, formatMiles } from '../lib/format.ts'
 import { LEVELS } from '../lib/risk.ts'
 import { tokens } from '../theme.ts'
@@ -9,13 +9,12 @@ import RiskStrip from './RiskStrip.tsx'
 
 interface Props {
   plan: Plan
-  interval: IntervalKey
   selectedId?: string
   onSelect: (id: string) => void
 }
 
-export default function RouteList({ plan, interval, selectedId, onSelect }: Props) {
-  const ranking = plan.rankings[interval]
+export default function RouteList({ plan, selectedId, onSelect }: Props) {
+  const ranking = plan.ranking
   const routes = ranking.order.map((id) => plan.routes.find((r) => r.id === id)!)
 
   return (
@@ -25,7 +24,7 @@ export default function RouteList({ plan, interval, selectedId, onSelect }: Prop
       sx={{ listStyle: 'none', m: 0, p: 0 }}
     >
       {routes.map((route) => {
-        const { checkpoints, summary } = route.intervals[interval]
+        const { checkpoints, summary } = route
         const selected = route.id === selectedId
         const recommended = route.id === ranking.recommended_id
         const miles = summary.miles_by_level

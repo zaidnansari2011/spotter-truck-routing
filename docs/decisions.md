@@ -25,6 +25,8 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-019](#dr-019-corridor-heatmap-data) | Corridor heatmap data | Accepted |
 | [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider) | Heatmap rendering and the timeline slider | Accepted |
 | [DR-021](#dr-021-browser-qa-and-the-production-map-worker) | Browser QA and the production map worker | Accepted |
+| [DR-022](#dr-022-departure-time-advisor) | Departure-time advisor | Accepted |
+| [DR-023](#dr-023-staying-inside-the-free-weather-quota) | Staying inside the free weather quota | Accepted (revises DR-018) |
 
 ---
 
@@ -364,7 +366,7 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 
 ## DR-018: Plan API design
 
-**One request returns all three sampling intervals.** `POST /api/plan` returns checkpoints, per-route summaries and a ranking for 10, 25 and 50 mile intervals together. Switching the interval in the UI is then instant, with no network request. The cost is a larger response, measured below.
+**One request returns all three sampling intervals.** `POST /api/plan` returns checkpoints, per-route summaries and a ranking for 10, 25 and 50 mile intervals together. Switching the interval in the UI is then instant, with no network request. The cost is a larger response, measured below. *Revised by DR-023: a plan now covers one interval, because each forecast location counts against the free weather quota.*
 
 **Request validation** (each rule is a test):
 - Origin and destination: label plus lat/lon in range, at least 1 km apart.
@@ -480,3 +482,47 @@ Real weather on the test day was calm everywhere (nothing reached Moderate), so 
 - On phones the map attribution opened expanded and covered a third of the map. It now starts collapsed behind its (i) button.
 - The checkpoint table was wider than the sidebar (the Snow column was cut off). Units moved to the caption and cell padding was tightened; it now fits exactly.
 - Place-search cache keys contained spaces and commas, which Django warns are unsafe for memcached. Keys are now hashed.
+
+---
+
+## DR-022: Departure-time advisor
+
+**Problem it solves.** When every route crosses bad weather, "which route" is the wrong question; "when should I leave" is the right one.
+
+**How it works.** The same 3 routes are re-scored as if the truck left 0 to 24 hours later, in 1 hour steps. Route geometry and driving times are reused and only the time each checkpoint is reached moves, so its forecast changes. For each departure the normal ranking picks the best route. The forecast window extends by 24 hours for the same locations, so this adds no forecast locations.
+
+**What is suggested.** The safest departure in the window (the earliest one if several tie), and only when it is strictly safer than leaving as planned. "Safer" compares everything the ranking compares except travel time. The first version suggested the *earliest* departure that was safer at all. A test showed why that is wrong: with a storm clearing over 4 hours it suggested waiting 1 hour to trim 25 of 100 Severe miles, when waiting 4 hours avoids the storm entirely.
+
+**Assumption, stated in the UI.** Driving times for later departures are the ones TomTom gave for the planned departure. Traffic at other times of day is not re-queried, which would cost 24 more routing calls per plan.
+
+**UI.** A 25-cell strip (planned departure, then +1 h to +24 h), each cell colored by the worst level on that departure's best route, a sentence such as "Leaving at Wed 9:00 AM (6 h later) avoids 42 mi of Severe", and a button to plan that departure. Any cell can be selected to re-plan; the form updates to the new time.
+
+**Tests.** 7 domain tests (offsets, shifted arrival times, the best route changing with departure time, no suggestion when the planned time is already safest or when later is only faster) and 2 API tests (24 hour coverage, waiting out a storm that covers every route).
+
+**Cost.** The first version took 270 ms per plan for 14,400 forecast lookups. Remembering lookups by (cell, time) and caching each route's timing profile with the route brought a repeated plan back to about 0.1 s.
+
+---
+
+## DR-023: Staying inside the free weather quota
+
+**Found while testing.** Open-Meteo returned `429 Minutely API request limit exceeded`. Controlled tests showed the free tier counts **each location** in a multi-location request as one call, whatever the number of variables: 3 requests of 250 locations went through (the limit is checked before a request is counted), and the next was refused. Limits are 600 per minute, 5,000 per hour and 10,000 per day.
+
+**Measured cost before the fix (Chicago to Denver).** 414 checkpoint locations (all three intervals) plus 425 heatmap points: about 840 calls per new trip. That allowed only about 12 new long trips per day, and a second one within a minute failed.
+
+**Options measured.**
+
+| Change | Locations |
+|---|---|
+| Coarser snapping for checkpoints (0.05 to 0.10 or 0.15 degrees) | 414 to 404 or 350, little gain |
+| Only the selected interval (25 mi) | 139 |
+| Heatmap grid capped at 300 points instead of 600 | 260 (0.45 degree spacing) instead of 423 |
+
+**Decision.**
+- A plan request covers one sampling interval (default 25 mi). Switching interval is a new request: about 0.7 s when routes are cached, and switching back is instant from the browser cache. The previous results stay on screen, dimmed, while the new ones load.
+- The heatmap grid is capped at 300 points. The blurred rendering (DR-020) hides the coarser spacing well.
+- On a per-minute 429 the client waits for the next minute and retries once (the window resets on the minute). Hourly or daily limits, or a second 429, return `503 weather_busy` with a plain message instead of a generic error.
+- Gunicorn's timeout is 120 s, so a request that waits out the minute is not cut off.
+
+**Result.** A new Chicago to Denver trip now costs about 400 calls instead of 840: roughly 25 new long trips per day, with repeated or similar trips served from the 30-minute forecast cache. Measured in the browser: first plan 5.7 s, switch to 10 mi 0.7 s, back to 25 mi 0.1 s with no request, and the heatmap fetched once. A paid Open-Meteo plan would remove the limits for production use.
+
+**Tests.** The per-minute retry (waits until the next minute plus 1 s, then succeeds), a second 429 giving up, hourly and daily limits failing fast without waiting, the 503 mapping, single-interval responses for 10, 25 and 50 miles, and an unknown interval being rejected.

@@ -1,5 +1,5 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
-import type { IntervalKey, Plan, RouteOption } from '../api/types.ts'
+import type { Plan, RouteOption } from '../api/types.ts'
 import { formatClock } from './format.ts'
 import { levelColor } from './risk.ts'
 
@@ -59,13 +59,10 @@ export function pointAlong(coords: LonLat[], fraction: number): LonLat {
  * Checkpoint miles come from the routing API; they are scaled onto the simplified map line,
  * whose length differs slightly.
  */
-export function riskSegments(
-  route: RouteOption,
-  interval: IntervalKey,
-): FeatureCollection<LineString> {
+export function riskSegments(route: RouteOption): FeatureCollection<LineString> {
   const cum = cumulativeMi(route.geometry)
   const scale = cum[cum.length - 1] / route.distance_mi
-  const checkpoints = route.intervals[interval].checkpoints
+  const checkpoints = route.checkpoints
   const features = checkpoints.map((cp, i): Feature<LineString> => {
     const start = i === 0 ? 0 : (checkpoints[i - 1].mile + cp.mile) / 2
     const end =
@@ -94,20 +91,17 @@ export function routeLines(plan: Plan, selectedId: string): FeatureCollection<Li
   }
 }
 
-export function checkpointPoints(
-  route: RouteOption,
-  interval: IntervalKey,
-): FeatureCollection<Point> {
+export function checkpointPoints(route: RouteOption): FeatureCollection<Point> {
   return {
     type: 'FeatureCollection',
-    features: route.intervals[interval].checkpoints.map((cp) => ({
+    features: route.checkpoints.map((cp) => ({
       type: 'Feature',
       properties: {
         index: cp.index,
         color: levelColor(cp.level),
         eta: formatClock(cp.eta),
         // Last checkpoint is the destination; label it even when it sits close to the previous one.
-        endpoint: cp.index === 0 || cp.index === route.intervals[interval].checkpoints.length - 1,
+        endpoint: cp.index === 0 || cp.index === route.checkpoints.length - 1,
       },
       geometry: { type: 'Point', coordinates: [cp.lon, cp.lat] },
     })),

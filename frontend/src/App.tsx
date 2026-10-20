@@ -16,26 +16,38 @@ import { corridorFeatures } from './lib/heatmap.ts'
 import { tokens } from './theme.ts'
 
 export default function App() {
-  const plan = usePlan()
   const [request, setRequest] = useState<PlanRequest>()
   const [interval, setSamplingInterval] = useState<IntervalKey>('25')
-  const [selectedId, setSelectedId] = useState<string>()
+  const plan = usePlan(request, interval)
+  const [chosenId, setChosenId] = useState<string>()
   const [formVersion, setFormVersion] = useState(0)
   const [map, setMap] = useState<MapLibreMap | null>(null)
   const [anchor, setAnchor] = useState<Anchor>('departure')
   const [nowStart, setNowStart] = useState<string>()
   const [heatLayer, setHeatLayer] = useState<HeatLayer>('risk')
 
-  const timelineStart = anchor === 'departure' ? plan.data?.departure : nowStart
-  const corridor = useCorridor(plan.data, timelineStart)
+  const data = plan.data
+  // The driver's pick if it exists in these results, otherwise the recommended route.
+  const selectedId = data?.routes.some((r) => r.id === chosenId)
+    ? chosenId
+    : data?.ranking.recommended_id
+  const updating = plan.isFetching && plan.isPlaceholderData
+
+  const timelineStart = anchor === 'departure' ? data?.departure : nowStart
+  const corridor = useCorridor(data, timelineStart)
   const heatFeatures = useMemo(
     () =>
-      plan.data && corridor.data
-        ? corridorFeatures(plan.data.corridor.points, corridor.data, heatLayer)
+      data && corridor.data
+        ? corridorFeatures(data.corridor.points, corridor.data, heatLayer)
         : undefined,
-    [plan.data, corridor.data, heatLayer],
+    [data, corridor.data, heatLayer],
   )
-  const setHeatTime = useHeatLayer(map, heatFeatures, plan.data?.corridor.spacing_deg, heatLayer)
+  const setHeatTime = useHeatLayer(map, heatFeatures, data?.corridor.spacing_deg, heatLayer)
+
+  function findRoutes(next: PlanRequest) {
+    setRequest(next)
+    setChosenId(undefined) // a new trip starts on its recommended route
+  }
 
   function replanAt(departure: string) {
     if (!request) return
@@ -46,13 +58,6 @@ export default function App() {
   function changeAnchor(next: Anchor) {
     if (next === 'now') setNowStart(new Date().toISOString())
     setAnchor(next)
-  }
-
-  function findRoutes(next: PlanRequest) {
-    setRequest(next)
-    plan.mutate(next, {
-      onSuccess: (result) => setSelectedId(result.rankings[interval].recommended_id),
-    })
   }
 
   return (
@@ -85,23 +90,29 @@ export default function App() {
           travel time.
         </Typography>
 
-        <TripForm key={formVersion} initial={request} busy={plan.isPending} onSubmit={findRoutes} />
+        <TripForm
+          key={formVersion}
+          initial={request}
+          busy={plan.isFetching}
+          onSubmit={findRoutes}
+        />
 
         {plan.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
             {plan.error.message}
           </Alert>
         )}
-        {plan.isPending && <ResultsSkeleton />}
-        {plan.data && request && (
+        {plan.isFetching && !data && <ResultsSkeleton />}
+        {data && request && (
           <Results
-            plan={plan.data}
+            plan={data}
             destination={request.destination.label}
             interval={interval}
             onIntervalChange={setSamplingInterval}
             selectedId={selectedId}
-            onSelect={setSelectedId}
-            busy={plan.isPending}
+            onSelect={setChosenId}
+            busy={plan.isFetching}
+            updating={updating}
             onReplan={replanAt}
           />
         )}
@@ -118,14 +129,13 @@ export default function App() {
         }}
       >
         <MapView
-          plan={plan.data}
-          interval={interval}
+          plan={data}
           selectedId={selectedId}
-          recommendedId={plan.data?.rankings[interval].recommended_id}
-          onSelectRoute={setSelectedId}
+          recommendedId={data?.ranking.recommended_id}
+          onSelectRoute={setChosenId}
           onMapReady={setMap}
         >
-          {plan.isPending && (
+          {plan.isFetching && (
             <LinearProgress
               aria-label="Finding routes"
               sx={{ position: 'absolute', top: 0, left: 0, right: 0 }}

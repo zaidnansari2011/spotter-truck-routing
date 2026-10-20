@@ -1,6 +1,6 @@
 import pytest
 
-from planner.domain.corridor import CORRIDOR_BUFFER_M, corridor_grid, densify
+from planner.domain.corridor import CORRIDOR_BUFFER_M, MAX_GRID_POINTS, corridor_grid, densify
 from planner.domain.geo import haversine_m
 
 
@@ -25,7 +25,7 @@ def test_every_grid_point_is_inside_the_corridor_and_coverage_is_complete():
 
     points, spacing = corridor_grid([route])
 
-    assert len(points) <= 600
+    assert len(points) <= MAX_GRID_POINTS
     assert all(distance_to(route, p) <= CORRIDOR_BUFFER_M + 2_500 for p in points)
     # every spot on the route has a grid point within one grid diagonal
     diagonal_m = spacing * 111_195 * 1.5
@@ -44,8 +44,8 @@ def test_long_corridors_get_coarser_spacing_but_stay_under_the_cap():
     long, long_spacing = corridor_grid([straight(41.88, -87.63, 39.74, -104.98)])  # Chicago -> Denver
 
     assert short_spacing < long_spacing
-    assert len(short) <= 600 and len(long) <= 600
-    assert len(long) > 300  # the cap is used well, not wasted
+    assert len(short) <= MAX_GRID_POINTS and len(long) <= MAX_GRID_POINTS
+    assert len(long) > MAX_GRID_POINTS / 2  # the cap is used well, not wasted
 
 
 def test_three_routes_share_one_grid():

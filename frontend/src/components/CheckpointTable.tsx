@@ -6,17 +6,17 @@ import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
-import type { IntervalKey, RouteOption } from '../api/types.ts'
+import type { RouteOption } from '../api/types.ts'
 import { formatClock, timeZoneName } from '../lib/format.ts'
 import { levelStyle } from '../lib/risk.ts'
 
 interface Props {
   route: RouteOption
-  interval: IntervalKey
+  interval: number
 }
 
 export default function CheckpointTable({ route, interval }: Props) {
-  const checkpoints = route.intervals[interval].checkpoints
+  const checkpoints = route.checkpoints
   return (
     <Box component="section" aria-labelledby="checkpoints-heading">
       <Typography id="checkpoints-heading" variant="h2" component="h2">

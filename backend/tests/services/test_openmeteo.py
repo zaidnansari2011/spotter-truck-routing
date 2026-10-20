@@ -7,7 +7,7 @@ import pytest
 import respx
 from django.core.cache.backends.locmem import LocMemCache
 
-from planner.services.openmeteo import OpenMeteoClient, WeatherError, snap
+from planner.services.openmeteo import OpenMeteoClient, WeatherError, WeatherRateLimited, snap
 
 H = 3600
 NOW = 1_800_000_000  # on the hour
@@ -49,9 +49,14 @@ def cache():
 
 
 @pytest.fixture
-def client(cache):
+def sleeps():
+    return []
+
+
+@pytest.fixture
+def client(cache, sleeps):
     with httpx.Client() as http:
-        yield OpenMeteoClient(http=http, cache=cache, now=lambda: NOW + 120)
+        yield OpenMeteoClient(http=http, cache=cache, now=lambda: NOW + 125, sleep=sleeps.append)
 
 
 def cells(n):
@@ -193,12 +198,47 @@ def test_api_error_reason_is_reported(client):
         client.hourly(cells(1), NOW, NOW + H)
 
 
+def too_many(reason):
+    return httpx.Response(429, json={"error": True, "reason": reason})
+
+
 @respx.mock
-def test_rate_limit_without_json_body(client):
+def test_minutely_limit_waits_for_the_next_minute_and_retries(client, sleeps):
+    FORECAST_URL.mock(side_effect=[too_many("Minutely API request limit exceeded."), respond_with_window])
+
+    result = client.hourly(cells(1), NOW, NOW + H)
+
+    assert sleeps == [56]  # 5 s past the minute: wait 55 s plus 1 s of margin
+    assert FORECAST_URL.call_count == 2
+    assert result[cells(1)[0]].wind_mph == [10.0, 10.0]
+
+
+@respx.mock
+def test_minutely_limit_twice_gives_up_with_a_rate_limit_error(client, sleeps):
+    limited = too_many("Minutely API request limit exceeded.")
+    FORECAST_URL.mock(side_effect=[limited, limited])
+
+    with pytest.raises(WeatherRateLimited, match="Minutely"):
+        client.hourly(cells(1), NOW, NOW + H)
+    assert len(sleeps) == 1
+
+
+@respx.mock
+def test_hourly_or_daily_limit_fails_fast_without_waiting(client, sleeps):
+    FORECAST_URL.mock(return_value=too_many("Daily API request limit exceeded."))
+
+    with pytest.raises(WeatherRateLimited, match="Daily"):
+        client.hourly(cells(1), NOW, NOW + H)
+    assert sleeps == []
+
+
+@respx.mock
+def test_rate_limit_without_json_body(client, sleeps):
     FORECAST_URL.mock(return_value=httpx.Response(429, text="slow down"))
 
-    with pytest.raises(WeatherError, match="HTTP 429: unknown"):
+    with pytest.raises(WeatherRateLimited, match="unknown"):
         client.hourly(cells(1), NOW, NOW + H)
+    assert sleeps == []
 
 
 @respx.mock

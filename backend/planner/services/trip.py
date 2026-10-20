@@ -1,7 +1,7 @@
 """Plan a trip: routes -> checkpoints -> forecasts at each ETA -> risk -> ranking.
 
-Everything for the three sampling intervals is computed in one pass so the UI can switch between
-them without another request (docs/decisions.md DR-018).
+Only the selected sampling interval is computed. The free forecast tier counts every location as
+one request, so fetching all three intervals up front doubled the cost of a plan (DR-023).
 """
 
 from __future__ import annotations
@@ -65,21 +65,16 @@ class TripRequest:
     destination: LatLon
     departure: datetime
     load_lb: float
+    interval_mi: int = 25
 
 
 def plan_trip(trip: TripRequest) -> dict:
     route_set = _routes(trip)
-    routes = route_set.routes
     departure_ts = trip.departure.timestamp()
-    profiles = route_set.profiles
-    checkpoints = {
-        (i, interval): place_checkpoints(profile, interval, departure_ts)
-        for i, profile in enumerate(profiles)
-        for interval in SAMPLING_INTERVALS_MI
-    }
+    checkpoints = [place_checkpoints(p, trip.interval_mi, departure_ts) for p in route_set.profiles]
 
-    every_checkpoint = [c for cps in checkpoints.values() for c in cps]
-    # The window also covers later departures for the advisor (same grid cells, more hours).
+    every_checkpoint = [c for cps in checkpoints for c in cps]
+    # The window also covers later departures for the advisor (same locations, more hours).
     series = openmeteo_client().hourly(
         [snap(c.lat, c.lon) for c in every_checkpoint],
         departure_ts,
@@ -87,52 +82,48 @@ def plan_trip(trip: TripRequest) -> dict:
     )
 
     route_payloads = []
-    scores: dict[int, list[RouteScore]] = {interval: [] for interval in SAMPLING_INTERVALS_MI}
-    for i, (route, profile, geometry) in enumerate(zip(routes, profiles, route_set.geometries, strict=True)):
-        route_id = ROUTE_IDS[i]
-        intervals = {}
-        for interval in SAMPLING_INTERVALS_MI:
-            cps = checkpoints[(i, interval)]
-            assessed = [_assess_checkpoint(c, series, trip.load_lb) for c in cps]
-            segments = [(c.covered_miles, level) for c, (_, level) in zip(cps, assessed, strict=True)]
-            score = score_route(route_id, profile.total_seconds, segments)
-            scores[interval].append(score)
-            intervals[str(interval)] = {
-                "checkpoints": [row for row, _ in assessed],
-                "summary": _summary(score),
-            }
+    scores: list[RouteScore] = []
+    for i, (route, profile, geometry, cps) in enumerate(
+        zip(route_set.routes, route_set.profiles, route_set.geometries, checkpoints, strict=True)
+    ):
+        assessed = [_assess_checkpoint(c, series, trip.load_lb) for c in cps]
+        score = score_route(
+            ROUTE_IDS[i],
+            profile.total_seconds,
+            [(c.covered_miles, level) for c, (_, level) in zip(cps, assessed, strict=True)],
+        )
+        scores.append(score)
         route_payloads.append(
             {
-                "id": route_id,
+                "id": ROUTE_IDS[i],
                 "source": route.source,
                 "distance_mi": round(profile.total_miles, 1),
                 "duration_s": round(profile.total_seconds),
                 "traffic_delay_s": round(route.traffic_delay_s),
                 "arrival": _iso(departure_ts + profile.total_seconds),
                 "geometry": geometry,
-                "intervals": intervals,
+                "checkpoints": [row for row, _ in assessed],
+                "summary": _summary(score),
             }
         )
 
     return {
         "departure": _iso(departure_ts),
         "load_lb": trip.load_lb,
+        "interval_mi": trip.interval_mi,
         "generated_at": _iso(datetime.now(timezone.utc).timestamp()),
         "routes": route_payloads,
-        "rankings": {str(interval): _ranking(scores[interval]) for interval in SAMPLING_INTERVALS_MI},
-        "departure_options": {
-            str(interval): _departure_advice(
-                [
-                    RouteCheckpoints(ROUTE_IDS[i], profile.total_seconds, checkpoints[(i, interval)])
-                    for i, profile in enumerate(profiles)
-                ],
-                departure_ts,
-                series,
-                trip.load_lb,
-            )
-            for interval in SAMPLING_INTERVALS_MI
-        },
-        "notices": _notices(routes),
+        "ranking": _ranking(scores),
+        "departure_options": _departure_advice(
+            [
+                RouteCheckpoints(ROUTE_IDS[i], profile.total_seconds, cps)
+                for i, (profile, cps) in enumerate(zip(route_set.profiles, checkpoints, strict=True))
+            ],
+            departure_ts,
+            series,
+            trip.load_lb,
+        ),
+        "notices": _notices(route_set.routes),
         "corridor": {
             "points": [[lon, lat] for lat, lon in route_set.corridor_points],
             "spacing_deg": route_set.corridor_spacing_deg,

@@ -34,10 +34,6 @@ function checkpoint(mile: number, level: Checkpoint['level']): Checkpoint {
 }
 
 function route(checkpoints: Checkpoint[], distance = 3 * DEG_MI): RouteOption {
-  const interval = {
-    checkpoints: checkpoints.map((c, i) => ({ ...c, index: i })),
-    summary: {} as never,
-  }
   return {
     id: 'A',
     source: 'tomtom',
@@ -46,7 +42,8 @@ function route(checkpoints: Checkpoint[], distance = 3 * DEG_MI): RouteOption {
     traffic_delay_s: 0,
     arrival: '2026-10-22T13:00:00Z',
     geometry: LINE,
-    intervals: { '10': interval, '25': interval, '50': interval },
+    checkpoints: checkpoints.map((c, i) => ({ ...c, index: i })),
+    summary: {} as never,
   }
 }
 
@@ -96,7 +93,7 @@ describe('riskSegments', () => {
       checkpoint(3 * DEG_MI, 'Moderate'),
     ])
 
-    const segments = riskSegments(r, '25').features
+    const segments = riskSegments(r).features
 
     expect(segments).toHaveLength(3)
     expect(segments.map((s) => s.properties!.color)).toEqual([
@@ -115,7 +112,7 @@ describe('riskSegments', () => {
     // lands at 1.5 degrees on the map line.
     const r = route([checkpoint(0, 'Low'), checkpoint(6 * DEG_MI, 'High')], 6 * DEG_MI)
 
-    const segments = riskSegments(r, '10').features
+    const segments = riskSegments(r).features
 
     expect(segments[0].geometry.coordinates.at(-1)![0]).toBeCloseTo(1.5, 4)
   })

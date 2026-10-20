@@ -12,11 +12,12 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 |---|---|
 | Origin, destination, departure date and time, load weight | Trip form with place search (US and Canada), a date-time picker in your time zone, load in pounds |
 | 3 route options from a routing API | TomTom truck routing with your load's weight; near-duplicate routes are replaced ([DR-015](docs/decisions.md#dr-015-guaranteeing-distinct-route-options)) |
-| Weather every 10 / 25 / 50 miles at the truck's arrival time | Spacing switch above the route list; all three are computed up front so switching is instant |
+| Weather every 10 / 25 / 50 miles at the truck's arrival time | Spacing switch above the route list (switching back to a spacing already seen is instant) |
 | Risk from the wind, rain and snow table plus the load rules | Every checkpoint shows its level, the condition that set it, and any load rule that raised it |
 | Recommend the best route, balancing risk and travel time | The guide sign at the top, the "Why Route A" panel, and a note when a riskier route is much faster |
 | All routes, checkpoints, risk levels, ETAs and summaries on a map | Route lines (the selected one colored by risk), checkpoint dots with arrival times, popups, and a summary chip per route |
 | Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button, and layers for risk, risk with load, wind, rain and snow |
+| Extra: best time to leave | Re-scores the routes for departures up to 24 hours later and suggests the safest one ([DR-022](docs/decisions.md#dr-022-departure-time-advisor)) |
 
 ## How the recommendation is made
 
@@ -57,14 +58,15 @@ Measured on the production build ([DR-018](docs/decisions.md#dr-018-plan-api-des
 
 | | |
 |---|---|
-| Plan, first request (Chicago to Denver, 3 routes, all intervals) | 4.6 to 4.9 s, mostly TomTom routing |
+| Plan, first request (Chicago to Denver, 3 routes, 25 mile checkpoints) | about 5 s, mostly TomTom routing |
+| Switching to another checkpoint spacing | 0.7 s; back to one already seen: instant |
 | Plan, repeated within 10 minutes | 0.10 s |
 | Plan response | 38 KB gzipped |
-| Heatmap data (425 grid points x 49 hours) | 0.56 s first time, 0.18 s cached, 48 KB gzipped |
+| Heatmap data (260 grid points x 49 hours) | about 0.5 s first time, 0.2 s cached |
 | Timeline playback | 127 fps in headless Edge, worst frame 16 ms |
 | Requests while dragging the slider | 0. The 49 hourly frames are on the map already and the GPU blends between hours |
 
-Forecasts are cached per 5 km grid cell for 30 minutes, so switching interval, toggling the timeline start or planning a similar trip reuses them ([DR-017](docs/decisions.md#dr-017-forecast-batching-and-caching)).
+Forecasts are cached per 5 km grid cell for 30 minutes, so toggling the timeline start or planning a similar trip reuses them ([DR-017](docs/decisions.md#dr-017-forecast-batching-and-caching)).
 
 ## Architecture
 
@@ -130,7 +132,9 @@ Run the tests with `cd backend && pytest` and `cd frontend && npm test`.
 - Truck travel times are pure driving time. Mandatory rest breaks under the hours-of-service rules are not added.
 - Open-Meteo's free tier is for non-commercial use. A production deployment would use their commercial plan.
 - Place search covers the US and Canada, where the high-resolution HRRR model is available.
-- Grid spacing for the heatmap grows with trip length (about 35 km for Chicago to Denver) to keep it under 600 points.
+- Grid spacing for the heatmap grows with trip length (about 45 km for Chicago to Denver) to keep it under 300 points.
+- The free weather tier counts every forecast location, about 400 for a new long trip, with limits of 600 per minute and 10,000 per day. The app waits out the per-minute limit once and explains hourly or daily limits ([DR-023](docs/decisions.md#dr-023-staying-inside-the-free-weather-quota)).
+- The departure advisor reuses the planned departure's driving times for later departures; traffic at other hours is not re-queried.
 
 ## Credits
 

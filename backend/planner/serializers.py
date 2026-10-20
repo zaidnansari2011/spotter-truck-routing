@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from rest_framework import serializers
 
+from planner.domain.checkpoints import SAMPLING_INTERVALS_MI
 from planner.domain.geo import haversine_m
 
 MAX_LOAD_LB = 80_000  # US federal gross limit; no legal cargo load exceeds it
@@ -23,6 +24,9 @@ class PlanRequestSerializer(serializers.Serializer):
         help_text="ISO 8601 with a UTC offset, e.g. 2026-10-22T08:00:00-05:00"
     )
     load_lb = serializers.FloatField(min_value=0, max_value=MAX_LOAD_LB, help_text="Cargo weight in pounds")
+    interval_mi = serializers.ChoiceField(
+        choices=SAMPLING_INTERVALS_MI, default=25, help_text="Miles between weather checkpoints"
+    )
 
     def validate_departure(self, value: datetime) -> datetime:
         # DRF makes naive input aware using TIME_ZONE, so check the raw text for an explicit offset.

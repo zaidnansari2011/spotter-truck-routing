@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import exception_handler
 
-from planner.services.openmeteo import WeatherError
+from planner.services.openmeteo import WeatherError, WeatherRateLimited
 from planner.services.tomtom import NoRouteError, TomTomError
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,12 @@ def api_exception_handler(exc, context):
             status.HTTP_502_BAD_GATEWAY,
             "routing_unavailable",
             "The routing service is unavailable. Try again shortly.",
+        )
+    if isinstance(exc, WeatherRateLimited):
+        return _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "weather_busy",
+            "The free weather service's request limit is used up for now. Try again in a few minutes.",
         )
     if isinstance(exc, WeatherError):
         return _error(

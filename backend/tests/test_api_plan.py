@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 
 from planner.api_errors import PlanThrottle
 from planner.domain.forecast import HOUR_S
-from planner.services.openmeteo import WeatherError
+from planner.services.openmeteo import WeatherError, WeatherRateLimited
 from planner.services.tomtom import NoRouteError, TomTomError
 from tests.support import FakeTomTom, FakeWeather, TimedWeather, body, post, route
 
@@ -27,8 +27,8 @@ def test_calm_weather_recommends_the_fastest_route(fakes):
     assert response.status_code == 200
     data = response.json()
     assert [r["id"] for r in data["routes"]] == ["A", "B", "C"]
-    assert set(data["rankings"]) == {"10", "25", "50"}
-    ranking = data["rankings"]["25"]
+    assert data["interval_mi"] == 25  # the default sampling interval
+    ranking = data["ranking"]
     assert ranking["recommended_id"] == "A"
     assert ranking["comparisons"][0]["decided_by"] == "duration"
     assert ranking["tradeoff"] is None
@@ -38,14 +38,14 @@ def test_calm_weather_recommends_the_fastest_route(fakes):
 def test_response_shape_for_routes_and_checkpoints(fakes):
     fakes()
 
-    data = post(body()).json()
+    data = post(body(interval_mi=50)).json()
 
     route_a = data["routes"][0]
     assert route_a["source"] == "tomtom"
     assert route_a["duration_s"] == 5 * HOUR_S
     assert route_a["geometry"][0] == [-100.0, 40.0]  # GeoJSON order: lon, lat
     assert len(route_a["geometry"]) == 2  # a straight line simplifies to its endpoints
-    checkpoints = route_a["intervals"]["50"]["checkpoints"]
+    checkpoints = route_a["checkpoints"]
     assert checkpoints[0]["mile"] == 0
     assert checkpoints[-1]["mile"] == route_a["distance_mi"]
     first = checkpoints[1]
@@ -62,7 +62,7 @@ def test_response_shape_for_routes_and_checkpoints(fakes):
         "factors",
         "load_rule",
     }
-    summary = route_a["intervals"]["50"]["summary"]
+    summary = route_a["summary"]
     assert summary["miles_by_level"]["Low"] == pytest.approx(route_a["distance_mi"], abs=0.2)
     assert summary["avg_risk"] == 0
     assert data["assumptions"]["gross_weight_kg_sent_to_routing"] == round(55_000 * 0.45359237)
@@ -79,7 +79,7 @@ def test_checkpoint_etas_follow_departure_and_route_time(fakes):
     data = post(body(departure=departure.isoformat())).json()
 
     route_a = data["routes"][0]
-    last = route_a["intervals"]["25"]["checkpoints"][-1]
+    last = route_a["checkpoints"][-1]
     assert last["eta"] == (departure + timedelta(hours=5)).isoformat().replace("+00:00", "Z")
     assert route_a["arrival"] == last["eta"]
 
@@ -87,29 +87,29 @@ def test_checkpoint_etas_follow_departure_and_route_time(fakes):
 def test_storm_on_the_fastest_route_moves_the_recommendation(fakes):
     fakes(weather=FakeWeather(storm_on_route_a))
 
-    data = post(body(load_lb=20_000)).json()
+    data = post(body(load_lb=20_000, interval_mi=10)).json()
 
-    ranking = data["rankings"]["10"]
+    ranking = data["ranking"]
     assert ranking["order"] == ["B", "C", "A"]
     assert comparison_with(ranking, "C")["decided_by"] == "duration"
     assert comparison_with(ranking, "A")["decided_by"] == "severe_miles"
     assert ranking["tradeoff"]["faster_id"] == "A"
     assert ranking["tradeoff"]["note"].startswith("Route A is 1 h faster but has")
-    severe = [c for c in data["routes"][0]["intervals"]["10"]["checkpoints"] if c["level"] == "Severe"]
+    severe = [c for c in data["routes"][0]["checkpoints"] if c["level"] == "Severe"]
     assert severe and all(c["factors"] == ["wind"] for c in severe)
 
 
 def test_heavy_load_turns_the_same_storm_into_no_travel(fakes):
     fakes(weather=FakeWeather(storm_on_route_a))
 
-    data = post(body(load_lb=35_000)).json()
+    data = post(body(load_lb=35_000, interval_mi=10)).json()
 
-    route_a = data["routes"][0]["intervals"]["10"]
+    route_a = data["routes"][0]
     assert route_a["summary"]["do_not_travel"] is True
     flagged = [c for c in route_a["checkpoints"] if c["level"] == "No Travel"]
     assert flagged and all(c["load_rule"] == "45-54 mph wind with a load over 30,000 lb" for c in flagged)
     assert all(c["weather_level"] == "Severe" for c in flagged)
-    assert comparison_with(data["rankings"]["10"], "A")["decided_by"] == "no_travel_miles"
+    assert comparison_with(data["ranking"], "A")["decided_by"] == "no_travel_miles"
 
 
 @pytest.mark.parametrize(("load_lb", "level"), [(40_000, "High"), (40_001, "Severe")])
@@ -118,7 +118,7 @@ def test_load_rule_threshold_through_the_api(fakes, load_lb, level):
 
     data = post(body(load_lb=load_lb)).json()
 
-    assert {c["level"] for c in data["routes"][0]["intervals"]["50"]["checkpoints"]} == {level}
+    assert {c["level"] for c in data["routes"][0]["checkpoints"]} == {level}
 
 
 def test_missing_forecast_is_reported_as_unknown_not_low(fakes):
@@ -126,10 +126,10 @@ def test_missing_forecast_is_reported_as_unknown_not_low(fakes):
 
     data = post(body()).json()
 
-    checkpoint = data["routes"][0]["intervals"]["25"]["checkpoints"][1]
+    checkpoint = data["routes"][0]["checkpoints"][1]
     assert checkpoint["forecast"] is False
     assert checkpoint["level"] is None
-    summary = data["routes"][0]["intervals"]["25"]["summary"]
+    summary = data["routes"][0]["summary"]
     assert summary["avg_risk"] is None
     assert summary["unknown_miles"] == pytest.approx(data["routes"][0]["distance_mi"], abs=0.2)
 
@@ -150,7 +150,7 @@ def test_single_route_notice_wording(fakes):
 
     data = post(body()).json()
 
-    assert data["rankings"]["25"]["comparisons"] == []
+    assert data["ranking"]["comparisons"] == []
     assert "only 1 distinct road route " in data["notices"][0]
 
 
@@ -284,9 +284,9 @@ def test_departure_options_cover_the_next_24_hours(fakes):
 
     data = post(body()).json()
 
-    advice = data["departure_options"]["25"]
+    advice = data["departure_options"]
     assert [o["offset_h"] for o in advice["options"]] == list(range(25))
-    assert advice["options"][0]["route_id"] == data["rankings"]["25"]["recommended_id"]
+    assert advice["options"][0]["route_id"] == data["ranking"]["recommended_id"]
     assert advice["options"][0]["worst_level"] == "Low"
     assert advice["suggestion"] is None  # calm weather: leaving now is already safest
 
@@ -304,7 +304,7 @@ def test_advisor_suggests_waiting_out_a_storm_on_every_route(fakes):
 
     data = post(request).json()
 
-    advice = data["departure_options"]["25"]
+    advice = data["departure_options"]
     assert advice["options"][0]["worst_level"] == "Severe"
     suggestion = advice["suggestion"]
     assert suggestion["worst_level"] == "Low"
@@ -313,3 +313,36 @@ def test_advisor_suggests_waiting_out_a_storm_on_every_route(fakes):
     assert _departure_ts({"departure": suggestion["departure"]}) == pytest.approx(
         _departure_ts(data) + suggestion["offset_h"] * HOUR_S
     )
+
+
+@pytest.mark.parametrize("interval", [10, 25, 50])
+def test_only_the_requested_interval_is_computed(fakes, interval):
+    fakes()
+
+    data = post(body(interval_mi=interval)).json()
+
+    assert data["interval_mi"] == interval
+    route_a = data["routes"][0]
+    miles = [c["mile"] for c in route_a["checkpoints"]]
+    expected = [float(m) for m in range(0, int(route_a["distance_mi"]) + 1, interval)]
+    if expected[-1] != route_a["distance_mi"]:
+        expected.append(route_a["distance_mi"])  # the destination closes the list
+    assert miles == pytest.approx(expected, abs=0.1)
+
+
+def test_unknown_interval_is_rejected(fakes):
+    fakes()
+
+    response = post(body(interval_mi=15))
+
+    assert response.status_code == 400
+    assert "interval_mi" in response.json()["fields"]
+
+
+def test_weather_rate_limit_is_a_clear_503(fakes):
+    fakes(weather=FakeWeather(error=WeatherRateLimited("Hourly API request limit exceeded")))
+
+    response = post(body())
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "weather_busy"

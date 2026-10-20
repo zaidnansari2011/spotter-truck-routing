@@ -44,7 +44,8 @@ export interface RouteOption {
   traffic_delay_s: number
   arrival: string
   geometry: [number, number][] // [lon, lat]
-  intervals: Record<IntervalKey, { checkpoints: Checkpoint[]; summary: RouteSummary }>
+  checkpoints: Checkpoint[]
+  summary: RouteSummary
 }
 
 export interface Comparison {
@@ -83,8 +84,9 @@ export interface Plan {
   load_lb: number
   generated_at: string
   routes: RouteOption[]
-  rankings: Record<IntervalKey, Ranking>
-  departure_options: Record<IntervalKey, DepartureAdvice>
+  interval_mi: number
+  ranking: Ranking
+  departure_options: DepartureAdvice
   notices: string[]
   corridor: { points: [number, number][]; spacing_deg: number }
   assumptions: Record<string, unknown>

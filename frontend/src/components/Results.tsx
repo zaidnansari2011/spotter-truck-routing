@@ -19,6 +19,7 @@ interface Props {
   selectedId?: string
   onSelect: (id: string) => void
   busy: boolean
+  updating: boolean // a different interval is loading; the shown results are the previous ones
   onReplan: (departure: string) => void
 }
 
@@ -30,14 +31,19 @@ export default function Results({
   selectedId,
   onSelect,
   busy,
+  updating,
   onReplan,
 }: Props) {
-  const ranking = plan.rankings[interval]
+  const ranking = plan.ranking
   const recommended = plan.routes.find((r) => r.id === ranking.recommended_id)!
   const selected = plan.routes.find((r) => r.id === selectedId) ?? recommended
 
   return (
-    <Stack spacing={3} sx={{ mt: 3 }}>
+    <Stack
+      spacing={3}
+      aria-busy={updating}
+      sx={{ mt: 3, opacity: updating ? 0.55 : 1, transition: 'opacity 150ms' }}
+    >
       <RecommendationSign route={recommended} ranking={ranking} destination={destination} />
 
       {plan.notices.map((notice) => (
@@ -71,12 +77,12 @@ export default function Results({
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Weather is checked every {interval} miles. Select a route to see it on the map.
         </Typography>
-        <RouteList plan={plan} interval={interval} selectedId={selected.id} onSelect={onSelect} />
+        <RouteList plan={plan} selectedId={selected.id} onSelect={onSelect} />
       </section>
 
       <WhyPanel ranking={ranking} />
-      <DepartureWindow advice={plan.departure_options[interval]} busy={busy} onReplan={onReplan} />
-      <CheckpointTable route={selected} interval={interval} />
+      <DepartureWindow advice={plan.departure_options} busy={busy} onReplan={onReplan} />
+      <CheckpointTable route={selected} interval={plan.interval_mi} />
     </Stack>
   )
 }

@@ -28,7 +28,7 @@ def test_plan_response_includes_the_corridor_grid(fakes):
     data = post(body()).json()
 
     grid = data["corridor"]
-    assert 0 < len(grid["points"]) <= 600
+    assert 0 < len(grid["points"]) <= 300
     assert round(grid["spacing_deg"] / 0.05, 6).is_integer()
     lons = [lon for lon, _ in grid["points"]]
     assert min(lons) < -99.5 and max(lons) > -95.5  # covers the trip from end to end
