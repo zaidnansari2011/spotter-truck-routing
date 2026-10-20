@@ -1,21 +1,45 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import type { Map as MapLibreMap } from 'maplibre-gl'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
-import { usePlan } from './api/hooks.ts'
-import type { IntervalKey, PlanRequest } from './api/types.ts'
+import { useCorridor, usePlan } from './api/hooks.ts'
+import type { HeatLayer, IntervalKey, PlanRequest } from './api/types.ts'
 import Legend from './components/Legend.tsx'
 import MapView from './components/MapView.tsx'
 import Results, { ResultsSkeleton } from './components/Results.tsx'
+import TimelineBar, { type Anchor } from './components/TimelineBar.tsx'
 import TripForm from './components/TripForm.tsx'
+import { useHeatLayer } from './components/useHeatLayer.ts'
+import { corridorFeatures } from './lib/heatmap.ts'
 import { tokens } from './theme.ts'
 
 export default function App() {
   const plan = usePlan()
   const [request, setRequest] = useState<PlanRequest>()
-  const [interval, setInterval] = useState<IntervalKey>('25')
+  const [interval, setSamplingInterval] = useState<IntervalKey>('25')
   const [selectedId, setSelectedId] = useState<string>()
+  const [map, setMap] = useState<MapLibreMap | null>(null)
+  const [anchor, setAnchor] = useState<Anchor>('departure')
+  const [nowStart, setNowStart] = useState<string>()
+  const [heatLayer, setHeatLayer] = useState<HeatLayer>('risk')
+
+  const timelineStart = anchor === 'departure' ? plan.data?.departure : nowStart
+  const corridor = useCorridor(plan.data, timelineStart)
+  const heatFeatures = useMemo(
+    () =>
+      plan.data && corridor.data
+        ? corridorFeatures(plan.data.corridor.points, corridor.data, heatLayer)
+        : undefined,
+    [plan.data, corridor.data, heatLayer],
+  )
+  const setHeatTime = useHeatLayer(map, heatFeatures, plan.data?.corridor.spacing_deg, heatLayer)
+
+  function changeAnchor(next: Anchor) {
+    if (next === 'now') setNowStart(new Date().toISOString())
+    setAnchor(next)
+  }
 
   function findRoutes(next: PlanRequest) {
     setRequest(next)
@@ -67,7 +91,7 @@ export default function App() {
             plan={plan.data}
             destination={request.destination.label}
             interval={interval}
-            onIntervalChange={setInterval}
+            onIntervalChange={setSamplingInterval}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
@@ -80,8 +104,8 @@ export default function App() {
           order: { xs: 1, md: 2 },
           flex: 1,
           position: 'relative',
-          height: { xs: '48vh', md: 'auto' },
-          minHeight: 280,
+          height: { xs: '62vh', md: 'auto' },
+          minHeight: 360,
         }}
       >
         <MapView
@@ -90,6 +114,7 @@ export default function App() {
           selectedId={selectedId}
           recommendedId={plan.data?.rankings[interval].recommended_id}
           onSelectRoute={setSelectedId}
+          onMapReady={setMap}
         >
           {plan.isPending && (
             <LinearProgress
@@ -98,6 +123,17 @@ export default function App() {
             />
           )}
           <Legend />
+          <TimelineBar
+            hours={corridor.data?.hours}
+            startTs={timelineStart ? Date.parse(timelineStart) / 1000 : undefined}
+            loading={corridor.isFetching}
+            error={corridor.isError ? corridor.error.message : undefined}
+            anchor={anchor}
+            onAnchorChange={changeAnchor}
+            layer={heatLayer}
+            onLayerChange={setHeatLayer}
+            onTimeChange={setHeatTime}
+          />
         </MapView>
       </Box>
     </Box>

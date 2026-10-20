@@ -21,6 +21,7 @@ import {
   riskSegments,
   routeLines,
 } from '../lib/mapData.ts'
+import { colorExpression, opacityExpression, radiusExpression } from '../lib/heatmap.ts'
 import { checkpointPopupHtml } from '../lib/popup.ts'
 import { fontFamily, tokens } from '../theme.ts'
 
@@ -146,8 +147,27 @@ function source(map: MapLibreMap, id: string): GeoJSONSource {
 }
 
 function addRouteLayers(map: MapLibreMap) {
-  for (const id of ['routes', 'risk', 'checkpoints'])
+  for (const id of ['heat', 'routes', 'risk', 'checkpoints']) {
     map.addSource(id, { type: 'geojson', data: EMPTY })
+  }
+
+  // The weather overlay sits under the basemap's labels so place names stay readable.
+  const firstLabel = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id
+  map.addLayer(
+    {
+      id: 'heat',
+      type: 'circle',
+      source: 'heat',
+      paint: {
+        'circle-blur': 1,
+        'circle-pitch-alignment': 'map',
+        'circle-radius': radiusExpression(0.25),
+        'circle-color': colorExpression('risk', 0),
+        'circle-opacity': opacityExpression('risk', 0),
+      },
+    },
+    firstLabel,
+  )
 
   map.addLayer({
     id: 'routes-other',

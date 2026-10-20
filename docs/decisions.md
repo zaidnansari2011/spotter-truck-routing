@@ -23,6 +23,8 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-017](#dr-017-forecast-batching-and-caching) | Forecast batching and caching | Accepted |
 | [DR-018](#dr-018-plan-api-design) | Plan API design | Accepted |
 | [DR-019](#dr-019-corridor-heatmap-data) | Corridor heatmap data | Accepted |
+| [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider) | Heatmap rendering and the timeline slider | Accepted |
+| [DR-021](#dr-021-browser-qa-and-the-production-map-worker) | Browser QA and the production map worker | Accepted |
 
 ---
 
@@ -429,3 +431,50 @@ Values are floored, not rounded, so `floor(risk / 100)` always equals the discre
 **Testing safeguard added.** The corridor service first imported the forecast client factory by name, so tests that swapped in a fake client still reached the live API without failing. Services now look the factory up through its module, and an autouse fixture makes every API test fail loudly if it touches a live client without installing fakes.
 
 **Tests.** 7 grid tests (buffer containment, full coverage along the route, spacing on the 0.05 degree lattice, the point cap, multiple routes) and 13 endpoint tests (frame count and timing, units, the load-adjusted layer differing exactly at 30,000 vs 30,001 lb, nulls, validation, rate limit). Backend total: 216 tests, 100% branch coverage.
+
+---
+
+## DR-020: Heatmap rendering and the timeline slider
+
+**Options considered.**
+1. MapLibre's built-in `heatmap` layer. Smooth, but it colors by point *density* (the sum of nearby weighted kernels), so the color at a spot depends on grid spacing and zoom, not only on the forecast. The legend could not be trusted.
+2. Square grid cells (fill polygons). Exact, but reads as a coarse mosaic at 35 km spacing.
+3. **One blurred disc per grid point, colored directly from its value.** Exact colors, smooth look, and still a GPU layer.
+
+**Decision.** Option 3:
+- Colors use the same 5 risk colors as the checkpoints and legend. Each band holds its level's color and only blends into the next over the last 10% before a threshold, so the map matches the legend everywhere except right at band edges.
+- Below Moderate the layer fades to transparent. Calm weather leaves the map clean and storms stand out.
+- Disc radius follows the grid spacing at every zoom (exponential zoom expression). A first try at 1.1x the spacing looked blocky in the QA screenshots, so the final value is 1.8x with peak opacity 0.62, which blends neighbors into a continuous field.
+- The layer sits under the basemap's place labels and under the routes.
+
+**Slider performance.** The 49 hourly values live on each map feature (`v0` to `v48`). Moving the slider only swaps two paint expressions (color and opacity), which read and blend the two neighboring hours on the GPU for 15-minute steps. The slider's position is local state inside the timeline bar, so dragging never re-renders the sidebar or the 100-row checkpoint table.
+
+**Slider start.** Hour 0 is the exact departure time (or the moment "From now" was chosen), not the top of the hour. Forecast frames start on the hour, so the slider maps into them with a fractional offset; the clock label and the "N h after departure" text always agree.
+
+**Measured in headless Edge (GPU, 1440x900, Chicago to Denver, 425 grid points).**
+
+| Measure | Value |
+|---|---|
+| Heatmap ready after routes appear | 1.9 s |
+| Playback frame rate | 127 fps (no vsync cap in headless), worst frame 16 ms |
+| API requests while dragging the slider or playing | 0 |
+| "From now" toggle | 1 corridor request (served from the forecast cache) |
+| Console or page errors | 0 |
+
+Real weather on the test day was calm everywhere (nothing reached Moderate), so the rendering was also checked with a synthetic storm injected into the corridor response by the test browser only. The app code has no test hooks.
+
+---
+
+## DR-021: Browser QA and the production map worker
+
+**Setup.** UI checks run a real browser: the installed Microsoft Edge in headless mode, driven by `playwright-core` (no browser download). Scripts load the production build served by Django, fill the example trip, find routes, switch intervals and layers, play the timeline, and record screenshots, console errors, failed requests and frame timing.
+
+**Bug found.** The first run showed a blank map in the production build. MapLibre GL v6 loads its web worker from a file next to its own module (`maplibre-gl-worker.mjs`). After bundling, that file did not exist, the request returned 404, and the map never finished loading. Development mode hid this because Vite serves `node_modules` directly.
+
+**Fix.** The worker is imported with Vite's `?url` suffix, so it is emitted as a hashed asset, and its URL is passed to MapLibre's `setWorkerUrl`. Verified: the worker is served with `text/javascript`, the map renders, and runs report 0 console errors.
+
+**Other fixes from the screenshots.**
+- ETA labels only appeared from zoom 5.5, so the starting view showed none. They now start at zoom 3.5, and MapLibre's label collision keeps as many as fit, with origin and destination first.
+- On phones the map attribution opened expanded and covered a third of the map. It now starts collapsed behind its (i) button.
+- The checkpoint table was wider than the sidebar (the Snow column was cut off). Units moved to the caption and cell padding was tightened; it now fits exactly.
+- Place-search cache keys contained spaces and commas, which Django warns are unsafe for memcached. Keys are now hashed.
