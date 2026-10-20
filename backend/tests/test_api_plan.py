@@ -387,3 +387,31 @@ def test_rest_breaks_change_how_much_faster_a_route_is(fakes):
 
     assert plain["comparisons"][0]["reason"] == "Shortest travel time: 10 h 54 min vs 11 h 12 min on Route A"
     assert rested["comparisons"][0]["reason"] == "Shortest travel time: 11 h 24 min vs 21 h 42 min on Route A"
+
+
+def test_weather_is_never_simulated_without_the_demo_flag(fakes):
+    fakes()
+
+    data = post(body()).json()
+
+    assert data["simulation"] is None
+    assert {c["level"] for r in data["routes"] for c in r["checkpoints"]} == {"Low"}
+
+
+def test_demo_storm_hits_the_fastest_route_and_is_reported(fakes):
+    fakes()
+
+    data = post(body(demo="storm", interval_mi=10)).json()
+
+    sim = data["simulation"]
+    assert sim["center"][0] == pytest.approx(-98.0, abs=0.05)  # 40% along route A (-100 to -95)
+    route_a = data["routes"][0]
+    assert route_a["summary"]["miles_by_level"]["No Travel"] > 0
+    assert data["ranking"]["recommended_id"] != "A"
+    assert data["departure_options"]["suggestion"] is not None  # waiting lets the storm pass
+
+
+def test_unknown_demo_is_rejected(fakes):
+    fakes()
+
+    assert post(body(demo="hurricane")).status_code == 400

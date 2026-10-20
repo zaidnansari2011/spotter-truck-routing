@@ -29,6 +29,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-023](#dr-023-staying-inside-the-free-weather-quota) | Staying inside the free weather quota | Accepted (revises DR-018) |
 | [DR-024](#dr-024-trucks-on-the-timeline) | Trucks on the timeline | Accepted |
 | [DR-025](#dr-025-hours-of-service-rest-breaks) | Hours-of-service rest breaks | Accepted |
+| [DR-026](#dr-026-simulated-storm-demo-mode) | Simulated storm demo mode | Accepted |
 
 ---
 
@@ -558,3 +559,24 @@ Real weather on the test day was calm everywhere (nothing reached Moderate), so 
 **Measured.** Chicago to Denver, 14.9 h of driving: "25 h 22 min including 10 h 30 min of rest, arrives Thu 4:52 AM" (one 30 minute break and one 10 hour rest).
 
 **Tests.** 13 rule tests (break and rest boundaries, multi-day trips, never decreasing), a checkpoint test (driving time unchanged, ETA uses the clock), an advisor test (later departures keep the rests), and 3 API tests (off by default, a 20 h drive arriving 31 h after departure with the rest between two checkpoints, and the widened time gap in the ranking reason).
+
+---
+
+## DR-026: Simulated storm demo mode
+
+**Problem.** During development the real forecast was calm along every test corridor: every checkpoint Low, nothing on the heatmap, no load rule ever applying. That hides most of what the app does, including in a walkthrough recorded on a calm day.
+
+**Decision.** A demo mode, switched on only by opening the page with `?demo=storm`, lays a synthetic winter storm over the real forecast:
+- centred 40% of the way along the fastest route, strongest when that route's truck would arrive there, building up over 2 hours and fading to nothing over 14 hours;
+- 62 mph winds and 2.6 in/hr of snow at the centre, falling to zero at 180 km, so the ring around the core passes through every wind band the load rules use;
+- the worse of real and simulated values wins at each point, and missing real data stays missing.
+
+The storm is applied after the real forecast is fetched and cached, so cached data is never altered. The plan response reports it (`simulation`), the heatmap request sends it back so the map shows the same storm, and requests without the flag are never touched (tested).
+
+**Labelling.** Every view in demo mode shows a warning banner in the sidebar ("Simulated storm. The weather on this page is made up...") and a filled banner on the map, so a screenshot can never pass as a real forecast.
+
+**What it shows (Chicago to Denver, measured).** Route A: 75 No Travel miles and 50 High miles, badged "Do not travel". Route B is recommended. The heatmap shows the storm on Route A between Lincoln and Des Moines and fading over the timeline.
+
+**Wording fix found with it.** The guide sign's headline said "Fastest, with the same weather risk as the others" whenever travel time decided against the runner-up. With the storm, B and C tied on risk but A did not, so the sentence was false. It now reads "Fastest of the routes with the least weather risk", which is true in both cases.
+
+**Tests.** 10 tests for the storm (full strength at the centre is No Travel, falloff with distance, nothing outside the radius, build-up and dissipation, the ring exercising the load rules, overlay rules) and 5 API tests (no simulation without the flag, the storm hitting the fastest route and moving the recommendation, an unknown demo rejected, the corridor showing the same storm, a bad simulation block rejected).

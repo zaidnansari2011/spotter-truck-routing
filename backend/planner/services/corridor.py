@@ -12,17 +12,20 @@ import math
 from planner.domain.forecast import HOUR_S, HourlySeries
 from planner.domain.geo import LatLon
 from planner.domain.risk import risk_index
+from planner.domain.scenario import SimulatedStorm
 from planner.services import trip
 from planner.services.openmeteo import snap
 
 FRAME_COUNT = 49  # hour 0 through hour 48
 
 
-def corridor_frames(points: list[LatLon], start_ts: float, load_lb: float) -> dict:
+def corridor_frames(
+    points: list[LatLon], start_ts: float, load_lb: float, storm: SimulatedStorm | None = None
+) -> dict:
     start = math.floor(start_ts / HOUR_S) * HOUR_S
     hours = [start + k * HOUR_S for k in range(FRAME_COUNT)]
     cells = [snap(lat, lon) for lat, lon in points]
-    series = trip.openmeteo_client().hourly(cells, hours[0], hours[-1])
+    series = trip.weather_client(storm).hourly(cells, hours[0], hours[-1])
 
     frames: dict[str, list[list[int | None]]] = {
         key: [] for key in ("risk", "risk_load", "wind", "rain", "snow")

@@ -9,6 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from planner.api_errors import CorridorThrottle, PlanThrottle, SuggestThrottle
+from planner.domain.scenario import SimulatedStorm
 from planner.serializers import (
     CorridorRequestSerializer,
     PlaceSerializer,
@@ -70,6 +71,7 @@ def plan(request: Request) -> Response:
             load_lb=data["load_lb"],
             interval_mi=data["interval_mi"],
             hos=data["hos"],
+            demo_storm=data.get("demo") == "storm",
         )
     )
     return Response(result)
@@ -100,4 +102,8 @@ def corridor_weather(request: Request) -> Response:
     body.is_valid(raise_exception=True)
     data = body.validated_data
     points = [(lat, lon) for lon, lat in data["points"]]
-    return Response(corridor.corridor_frames(points, data["start"].timestamp(), data["load_lb"]))
+    storm = None
+    if "simulation" in data:
+        lon, lat = data["simulation"]["center"]
+        storm = SimulatedStorm(center=(lat, lon), start_ts=data["simulation"]["start"].timestamp())
+    return Response(corridor.corridor_frames(points, data["start"].timestamp(), data["load_lb"], storm))

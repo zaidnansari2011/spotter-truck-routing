@@ -16,7 +16,7 @@ function ranking(overrides: Partial<Ranking> = {}): Ranking {
 describe('recommendationHeadline', () => {
   it('explains a time-based pick as equal risk, faster', () => {
     expect(recommendationHeadline(ranking())).toBe(
-      'Fastest, with the same weather risk as the others',
+      'Fastest of the routes with the least weather risk',
     )
   })
 

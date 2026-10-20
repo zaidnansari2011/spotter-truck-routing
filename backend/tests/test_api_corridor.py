@@ -98,3 +98,23 @@ def test_corridor_requests_are_rate_limited(fakes, monkeypatch):
     monkeypatch.setattr(CorridorThrottle, "THROTTLE_RATES", {"corridor": "1/hour"})
 
     assert [corridor(request()).status_code for _ in range(2)] == [200, 429]
+
+
+def test_corridor_shows_the_demo_storm_when_the_plan_used_one(fakes):
+    fakes()
+    simulation = {"center": [-99.65, 40.0], "start": START.isoformat()}
+
+    real = corridor(request()).json()
+    simulated = corridor(request(simulation=simulation)).json()
+
+    assert max(real["risk"][1]) < 100  # calm
+    assert max(simulated["risk"][1]) == 400  # the storm centre is No Travel
+    assert max(simulated["wind"][1]) > 55  # peak winds at the centre (it builds up before hour 0)
+
+
+def test_corridor_rejects_a_bad_simulation_block(fakes):
+    fakes()
+
+    response = corridor(request(simulation={"center": [-99.65, 95.0], "start": START.isoformat()}))
+
+    assert response.status_code == 400

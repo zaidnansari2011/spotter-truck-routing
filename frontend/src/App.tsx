@@ -6,6 +6,7 @@ import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
 import { useCorridor, usePlan } from './api/hooks.ts'
 import type { HeatLayer, IntervalKey, PlanRequest } from './api/types.ts'
+import DemoBanner from './components/DemoBanner.tsx'
 import Legend from './components/Legend.tsx'
 import MapView from './components/MapView.tsx'
 import Results, { ResultsSkeleton } from './components/Results.tsx'
@@ -15,6 +16,9 @@ import { useHeatLayer } from './components/useHeatLayer.ts'
 import { useTruckLayer } from './components/useTruckLayer.ts'
 import { corridorFeatures } from './lib/heatmap.ts'
 import { tokens } from './theme.ts'
+
+// Demo mode lays a simulated storm over the real forecast; every page using it says so.
+const DEMO_STORM = new URLSearchParams(window.location.search).get('demo') === 'storm'
 
 export default function App() {
   const [request, setRequest] = useState<PlanRequest>()
@@ -54,7 +58,7 @@ export default function App() {
   )
 
   function findRoutes(next: PlanRequest) {
-    setRequest(next)
+    setRequest(DEMO_STORM ? { ...next, demo: 'storm' } : next)
     setChosenId(undefined) // a new trip starts on its recommended route
   }
 
@@ -98,6 +102,8 @@ export default function App() {
           Compare three truck routes by forecast weather at your arrival time, load weight and
           travel time.
         </Typography>
+
+        {DEMO_STORM && <DemoBanner />}
 
         <TripForm
           key={formVersion}
@@ -151,6 +157,19 @@ export default function App() {
             />
           )}
           <Legend />
+          {DEMO_STORM && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 12,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                maxWidth: 420,
+              }}
+            >
+              <DemoBanner compact />
+            </Box>
+          )}
           <TimelineBar
             hours={corridor.data?.hours}
             startTs={timelineStart ? Date.parse(timelineStart) / 1000 : undefined}

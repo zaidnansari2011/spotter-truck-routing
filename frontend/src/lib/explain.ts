@@ -8,7 +8,7 @@ const HEADLINES: Record<string, string> = {
   severe_miles: 'Fewest miles in Severe weather',
   high_miles: 'Fewest miles in High-risk weather',
   avg_risk: 'Lowest average weather risk',
-  duration: 'Fastest, with the same weather risk as the others',
+  duration: 'Fastest of the routes with the least weather risk',
   tie: 'Equal to the other routes on every measure',
 }
 

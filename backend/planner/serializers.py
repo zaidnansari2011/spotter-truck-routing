@@ -27,6 +27,9 @@ class PlanRequestSerializer(serializers.Serializer):
     interval_mi = serializers.ChoiceField(
         choices=SAMPLING_INTERVALS_MI, default=25, help_text="Miles between weather checkpoints"
     )
+    demo = serializers.ChoiceField(
+        choices=["storm"], required=False, help_text="Lay a simulated storm over the forecast (demo only)"
+    )
     hos = serializers.BooleanField(
         default=False, help_text="Add hours-of-service rest breaks (30 min after 8 h, 10 h off after 11 h)"
     )
@@ -57,6 +60,17 @@ class SuggestQuerySerializer(serializers.Serializer):
 MAX_CORRIDOR_POINTS = 1_000
 
 
+class SimulationSerializer(serializers.Serializer):
+    center = serializers.ListField(child=serializers.FloatField(), min_length=2, max_length=2)
+    start = serializers.DateTimeField()
+
+    def validate_center(self, value):
+        lon, lat = value
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise serializers.ValidationError("center must be [lon, lat] within valid ranges.")
+        return value
+
+
 class CorridorRequestSerializer(serializers.Serializer):
     points = serializers.ListField(
         child=serializers.ListField(child=serializers.FloatField(), min_length=2, max_length=2),
@@ -66,6 +80,7 @@ class CorridorRequestSerializer(serializers.Serializer):
     )
     start = serializers.DateTimeField(help_text="Hour 0 of the slider, ISO 8601 with a UTC offset")
     load_lb = serializers.FloatField(min_value=0, max_value=MAX_LOAD_LB)
+    simulation = SimulationSerializer(required=False, help_text="The plan's simulation block, in demo mode")
 
     def validate_points(self, value):
         for lon, lat in value:

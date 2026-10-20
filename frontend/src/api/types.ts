@@ -91,6 +91,7 @@ export interface Plan {
   ranking: Ranking
   departure_options: DepartureAdvice
   notices: string[]
+  simulation: { center: [number, number]; start: string } | null
   corridor: { points: [number, number][]; spacing_deg: number }
   assumptions: Record<string, unknown>
 }
@@ -101,6 +102,7 @@ export interface PlanRequest {
   departure: string
   load_lb: number
   hos?: boolean // add hours-of-service rest breaks
+  demo?: 'storm' // simulated storm, only when the page is opened with ?demo=storm
 }
 
 export type HeatLayer = 'risk' | 'risk_load' | 'wind' | 'rain' | 'snow'

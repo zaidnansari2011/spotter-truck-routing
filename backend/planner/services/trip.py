@@ -24,11 +24,13 @@ from planner.domain.checkpoints import (
 )
 from planner.domain.corridor import corridor_grid
 from planner.domain.forecast import HOUR_S, weather_at
-from planner.domain.geo import LatLon, simplify
+from planner.domain.geo import LatLon, point_at_fraction, simplify
 from planner.domain.hos import wall_clock
 from planner.domain.ranking import RouteScore, rank, score_route
 from planner.domain.risk import NO_TRAVEL_LOAD_LB, SEVERE_LOAD_LB, RiskLevel, assess
+from planner.domain.scenario import SimulatedStorm
 from planner.services.openmeteo import OpenMeteoClient, snap
+from planner.services.simulation import SimulatedWeather
 from planner.services.tomtom import (
     TRACTOR_TRAILER_TARE_LB,
     RouteData,
@@ -68,6 +70,7 @@ class TripRequest:
     load_lb: float
     interval_mi: int = 25
     hos: bool = False  # add hours-of-service rest breaks to arrival times
+    demo_storm: bool = False  # lay a labelled, simulated storm over the real forecast
 
 
 def plan_trip(trip: TripRequest) -> dict:
@@ -78,8 +81,10 @@ def plan_trip(trip: TripRequest) -> dict:
     durations = [clock(p.total_seconds) if clock else p.total_seconds for p in route_set.profiles]
 
     every_checkpoint = [c for cps in checkpoints for c in cps]
+    storm = _demo_storm(route_set, departure_ts) if trip.demo_storm else None
+    weather = weather_client(storm)
     # The window also covers later departures for the advisor (same locations, more hours).
-    series = openmeteo_client().hourly(
+    series = weather.hourly(
         [snap(c.lat, c.lon) for c in every_checkpoint],
         departure_ts,
         max(c.eta_ts for c in every_checkpoint) + ADVISOR_HOURS[-1] * HOUR_S,
@@ -131,6 +136,9 @@ def plan_trip(trip: TripRequest) -> dict:
             trip.load_lb,
         ),
         "notices": _notices(route_set.routes),
+        "simulation": None
+        if storm is None
+        else {"center": [storm.center[1], storm.center[0]], "start": _iso(storm.start_ts)},
         "corridor": {
             "points": [[lon, lat] for lat, lon in route_set.corridor_points],
             "spacing_deg": route_set.corridor_spacing_deg,
@@ -145,6 +153,21 @@ def plan_trip(trip: TripRequest) -> dict:
             },
         },
     }
+
+
+def weather_client(storm: SimulatedStorm | None = None):
+    """The forecast client, with the demo storm laid on top when one is given."""
+    real = openmeteo_client()
+    return real if storm is None else SimulatedWeather(real, storm)
+
+
+def _demo_storm(route_set: RouteSet, departure_ts: float) -> SimulatedStorm:
+    """A storm 40% of the way along the fastest route, strongest when that truck would get there."""
+    fastest = route_set.profiles[0]
+    return SimulatedStorm(
+        center=point_at_fraction(route_set.routes[0].points, 0.4),
+        start_ts=departure_ts + 0.4 * fastest.total_seconds,
+    )
 
 
 def _routes(trip: TripRequest) -> RouteSet:
