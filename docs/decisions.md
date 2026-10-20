@@ -16,6 +16,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-010](#dr-010-map-rendering-maplibre-gl) | Map rendering: MapLibre GL | Accepted |
 | [DR-011](#dr-011-hosting-azure-container-apps) | Hosting: Azure Container Apps | Accepted |
 | [DR-012](#dr-012-stateless-backend-no-database) | Stateless backend, no database | Accepted |
+| [DR-013](#dr-013-continuous-risk-index-for-the-heatmap) | Continuous risk index for the heatmap | Accepted |
 
 ---
 
@@ -197,3 +198,22 @@ Comparing exact values picks B, which drives through the same 25 rainy miles but
 **Decision.** No database and no auth. Django runs with `DATABASES = {}`, and Redis caches the slow upstream calls (routes per request, forecasts per location and hour). If Redis is unreachable, cache errors are treated as misses, so the app keeps working, only slower.
 
 **Result.** Simpler deployment (one container plus a cache), nothing to migrate, and the app scales horizontally without coordination. Verified locally: one Django process serves the built React app at `/`, the API at `/api/health/`, and OpenAPI docs at `/api/docs/`.
+
+---
+
+## DR-013: Continuous risk index for the heatmap
+
+**Context.** Five discrete levels make a blocky heatmap with hard color jumps. A smooth gradient reads better and animates more smoothly with the slider. But the heatmap must never contradict the checkpoint markers: a point the markers call High cannot be painted Severe.
+
+**Decision.** Each condition maps to a 0 to 4 index by linear interpolation inside its band, so band edges land on whole numbers (wind 25 mph = 1.0, 35 mph = 2.0, and so on). The combined index is the maximum of wind, rain and snow. Two details keep `floor(index)` equal to the discrete level:
+- The Severe band for rain and snow includes its top edge (1.00 in/hr, 3.0 in/hr), so its index is capped at 3.999 there. Only values above the edge reach 4.
+- The load-adjusted index (heatmap option "Risk for this load") is raised to the level a load rule forces.
+
+**Also decided.** A checkpoint reports every condition at its final level (e.g. "High: wind, rain"). A load rule is reported only when it actually raised the level. If snow is already Severe, a heavy-load wind rule that would also give Severe is not shown as the reason.
+
+**Tested.** 47 unit tests, 100% branch coverage of `risk.py`:
+- every band edge from DR-006 for wind, rain and snow,
+- all three load rules at and just past their weight thresholds,
+- `floor(index) == level` for 2,001 evenly spaced values per condition plus every edge,
+- the index never decreases as the value rises,
+- combined and load-adjusted indices agree with the assessed levels.
