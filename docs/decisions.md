@@ -135,6 +135,15 @@ A constant-speed model would read weather for the wrong hour at most checkpoints
 
 A checkpoint whose ETA falls beyond the forecast horizon is marked "no forecast", never silently rated Low.
 
+**Edge cases handled.**
+- ETA exactly on the hour (15:00) uses the 15:00 bucket. One second later moves to the 16:00 bucket.
+- Missing wind, rain, showers or snow value: the sample is "no forecast". A missing gust value does not hide the sample, since gusts are display-only.
+- Rain plus showers is rounded back to Open-Meteo's 3-decimal precision. Without this, `0.01 + 0.09` evaluates to `0.09999999999999999` in floating point and would be rated Low instead of Moderate.
+
+**Verified live (2026-10-21).** A 72-hour request returned 72 timestamps, all exactly on the hour, contiguous, with no null values in any field. This is the shape `HourlySeries` assumes.
+
+**Tests.** 11 unit tests covering bucket selection, wind interpolation, the exact-hour boundary, float rounding, horizon limits, and missing values. 100% branch coverage.
+
 ---
 
 ## DR-006: Interpreting the risk table boundaries
