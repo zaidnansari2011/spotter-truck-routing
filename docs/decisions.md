@@ -77,6 +77,32 @@ Every significant choice in this project, with the options considered, what was 
 
 **Also decided.** Routes carry 10,000 to 16,000 points. Checkpoints are computed on the full geometry on the server, and a simplified line is sent to the browser to keep payloads small.
 
+**Implementation details.**
+- Mileage uses TomTom's reported distances, not the polyline's own length. On Chicago to Denver the polyline measures 1,004.71 mi while TomTom reports 1,006.68 mi. Using TomTom's figure keeps checkpoint miles consistent with the route length shown to the user.
+- Checkpoints sit at mile 0, every N miles, and the destination. A destination that falls exactly on a multiple of N is not duplicated.
+- Each checkpoint covers half the gap to each neighbor, clipped at the ends, so the miles per risk level always add up to the route length.
+
+**Results on the real Chicago to Denver truck route** (10,712 points, 122 anchors):
+
+| Interval | Checkpoints | Last checkpoint ETA | Covered miles sum |
+|---|---|---|---|
+| 10 mi | 102 | +14.594 h | 1,006.68 |
+| 25 mi | 42 | +14.594 h | 1,006.68 |
+| 50 mi | 22 | +14.594 h | 1,006.68 |
+
+The final ETA equals TomTom's own trip time (14.594 h) and covered miles equal the route length. Building the profile and all three checkpoint sets takes 15 ms.
+
+**Why constant speed would be wrong, measured.** The truck averages 33 mph over the first 50 miles (leaving Chicago) against 69 mph for the whole trip.
+
+| Mile | ETA from `progress` | ETA at constant 69 mph | Error |
+|---|---|---|---|
+| 50 | +1.50 h | +0.72 h | 46 min early |
+| 100 | +2.19 h | +1.45 h | 44 min early |
+
+A constant-speed model would read weather for the wrong hour at most checkpoints near cities.
+
+**Tests.** 24 unit tests on spacing, coverage, interpolation between anchors at different speeds, API length differing from polyline length, zero-length segments, and clamping at the route end. 100% branch coverage.
+
 ---
 
 ## DR-004: Weather provider: Open-Meteo
