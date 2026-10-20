@@ -64,7 +64,13 @@ if REDIS_URL:
     }
     DJANGO_REDIS_IGNORE_EXCEPTIONS = True
 else:
-    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    # The default 300-entry limit is smaller than one long trip's forecast cells (414 measured).
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "OPTIONS": {"MAX_ENTRIES": 10_000},
+        }
+    }
 
 # Only used by the Swagger UI page at /api/docs/.
 TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True}]

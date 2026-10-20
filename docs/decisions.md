@@ -20,6 +20,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-014](#dr-014-routes-without-a-forecast-rank-last) | Routes without a forecast rank last | Accepted |
 | [DR-015](#dr-015-guaranteeing-distinct-route-options) | Guaranteeing distinct route options | Accepted |
 | [DR-016](#dr-016-keep-the-api-key-out-of-logs) | Keep the API key out of logs | Accepted |
+| [DR-017](#dr-017-forecast-batching-and-caching) | Forecast batching and caching | Accepted |
 
 ---
 
@@ -325,3 +326,30 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 **Found during the live test.** `httpx` logs every request at INFO as `HTTP Request: GET <full url>`, and TomTom takes its key as a query parameter. With Django's root logger at INFO, the key would be written to the container logs on every request.
 
 **Decision.** The `httpx` and `httpcore` loggers are set to WARNING. A test asserts they cannot log at INFO, and a live call afterwards produced 0 log lines containing the key.
+
+---
+
+## DR-017: Forecast batching and caching
+
+**Context.** One plan needs forecasts for every checkpoint of 3 routes at 3 sampling intervals, plus the heatmap grid. Switching the interval in the UI, or two users planning similar trips, should not refetch the same weather.
+
+**Decisions.**
+- **Snap to a 0.05 degree grid** (about 5.5 km). That is finer than GFS (13 km) and close to HRRR (3 km), so it does not blur the forecast, and it merges checkpoints that fall in the same cell.
+- **One cache entry per grid cell**, holding every hour fetched so far. A request only fetches cells that are missing any hour of its window, and the new hours are merged into the entry. Entries expire after 30 minutes, since the models update hourly.
+- **Batches of up to 300 locations**, run in parallel when there is more than one.
+- **16-day horizon.** The request window is clipped to Open-Meteo's limit, so hours past it come back as unknown instead of the whole request failing.
+- **Errors** (HTTP errors, timeouts, a location-count mismatch) raise one `WeatherError` with Open-Meteo's reason, which the API maps to a clear 502.
+
+**Bug found by measuring.** The first live run made an HTTP request even when everything should have been cached. Django's in-memory cache keeps only 300 entries by default and silently evicts the rest, and this one trip needed 414 cells. Production uses Redis (no such limit), but the in-memory fallback is now set to 10,000 entries (roughly 50 MB at most).
+
+**Live results (Chicago to Denver, 2026-10-21).**
+
+| Measure | Value |
+|---|---|
+| Checkpoints, 3 routes x intervals 10/25/50 | 578 |
+| Distinct forecast cells after snapping | 414 (28% fewer) |
+| First fetch | 0.84 s, 2 parallel requests |
+| Repeat fetch (e.g. switching interval) | 0.01 s, 0 requests |
+| Checkpoints with a forecast at their ETA | 578 / 578 |
+
+**Tests.** 19 tests with mocked HTTP and an isolated cache per test: request parameters and units, whole-hour window rounding, single-location responses (an object, not a list), batches of 300/300/50, de-duplication, cache hits, merging when the window grows, the 16-day horizon, and error mapping. 100% branch coverage.
