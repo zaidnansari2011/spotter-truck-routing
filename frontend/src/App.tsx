@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -12,6 +12,7 @@ import Results, { ResultsSkeleton } from './components/Results.tsx'
 import TimelineBar, { type Anchor } from './components/TimelineBar.tsx'
 import TripForm from './components/TripForm.tsx'
 import { useHeatLayer } from './components/useHeatLayer.ts'
+import { useTruckLayer } from './components/useTruckLayer.ts'
 import { corridorFeatures } from './lib/heatmap.ts'
 import { tokens } from './theme.ts'
 
@@ -43,6 +44,14 @@ export default function App() {
     [data, corridor.data, heatLayer],
   )
   const setHeatTime = useHeatLayer(map, heatFeatures, data?.corridor.spacing_deg, heatLayer)
+  const setTruckTime = useTruckLayer(map, data)
+  const setTimelineTime = useCallback(
+    (frameIndex: number, momentTs: number | undefined) => {
+      setHeatTime(frameIndex)
+      setTruckTime(momentTs)
+    },
+    [setHeatTime, setTruckTime],
+  )
 
   function findRoutes(next: PlanRequest) {
     setRequest(next)
@@ -151,7 +160,7 @@ export default function App() {
             onAnchorChange={changeAnchor}
             layer={heatLayer}
             onLayerChange={setHeatLayer}
-            onTimeChange={setHeatTime}
+            onTimeChange={setTimelineTime}
           />
         </MapView>
       </Box>

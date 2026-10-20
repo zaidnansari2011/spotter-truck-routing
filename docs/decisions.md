@@ -27,6 +27,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-021](#dr-021-browser-qa-and-the-production-map-worker) | Browser QA and the production map worker | Accepted |
 | [DR-022](#dr-022-departure-time-advisor) | Departure-time advisor | Accepted |
 | [DR-023](#dr-023-staying-inside-the-free-weather-quota) | Staying inside the free weather quota | Accepted (revises DR-018) |
+| [DR-024](#dr-024-trucks-on-the-timeline) | Trucks on the timeline | Accepted |
 
 ---
 
@@ -526,3 +527,17 @@ Real weather on the test day was calm everywhere (nothing reached Moderate), so 
 **Result.** A new Chicago to Denver trip now costs about 400 calls instead of 840: roughly 25 new long trips per day, with repeated or similar trips served from the 30-minute forecast cache. Measured in the browser: first plan 5.7 s, switch to 10 mi 0.7 s, back to 25 mi 0.1 s with no request, and the heatmap fetched once. A paid Open-Meteo plan would remove the limits for production use.
 
 **Tests.** The per-minute retry (waits until the next minute plus 1 s, then succeeds), a second 429 giving up, hourly and daily limits failing fast without waiting, the 503 mapping, single-interval responses for 10, 25 and 50 miles, and an unknown interval being rejected.
+
+---
+
+## DR-024: Trucks on the timeline
+
+**Why.** The heatmap shows where the weather is; the checkpoints show when the truck gets there. A marker per route that moves with the slider puts both in one picture: you can watch a truck drive into, or around, a storm.
+
+**How.** Each truck's distance at a moment comes from the checkpoint arrival times (linear between two checkpoints), so it follows the same traffic-aware timing as the ETAs, not an average speed. The distance is then placed along the drawn road line, scaled because the simplified line is slightly shorter than the routing API's distance. Before departure the truck waits at the origin and after arrival it stays at the destination, both drawn faded. Positions only exist for the departure-anchored timeline; with "From now" a truck that has not left yet waits at the origin.
+
+**Performance.** Updating three points per slider step is a tiny GeoJSON update. Playback measured 91 to 95 fps in headless Edge with trucks and heatmap animating together (127 fps with the heatmap alone).
+
+**Tests.** 4 unit tests: waiting before departure, following uneven arrival times (a quarter of the way after 30 minutes when the first half takes 1 hour), parking at the destination, and feature properties.
+
+**QA note.** An automated check first reported that slider keys were ignored right after loading. The cause was the test's text selector: "At departure" matched "plan th*at departure*" in the advisor text, so the test acted while the heatmap was still loading and the slider was correctly disabled. Scoped to the timeline, the slider responds as expected.

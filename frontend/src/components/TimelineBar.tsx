@@ -31,7 +31,7 @@ interface Props {
   onAnchorChange: (anchor: Anchor) => void
   layer: HeatLayer
   onLayerChange: (layer: HeatLayer) => void
-  onTimeChange: (frameIndex: number) => void
+  onTimeChange: (frameIndex: number, momentTs: number | undefined) => void
 }
 
 function thresholdHint(layer: HeatLayer): string {
@@ -61,7 +61,11 @@ export default function TimelineBar({
   const frameOffset = hours && startTs ? (startTs - hours[0]) / 3600 : 0
 
   // Paint the map whenever the time, the offset or the paint function (layer) changes.
-  useEffect(() => onTimeChange(frameOffset + time), [time, frameOffset, onTimeChange])
+  const momentTs = startTs !== undefined ? startTs + time * 3600 : undefined
+  useEffect(
+    () => onTimeChange(frameOffset + time, momentTs),
+    [time, frameOffset, momentTs, onTimeChange],
+  )
 
   useEffect(() => {
     if (!playing) return

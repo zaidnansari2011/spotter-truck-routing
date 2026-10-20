@@ -151,7 +151,7 @@ function source(map: MapLibreMap, id: string): GeoJSONSource {
 }
 
 function addRouteLayers(map: MapLibreMap) {
-  for (const id of ['heat', 'routes', 'risk', 'checkpoints']) {
+  for (const id of ['heat', 'routes', 'risk', 'checkpoints', 'trucks']) {
     map.addSource(id, { type: 'geojson', data: EMPTY })
   }
 
@@ -226,6 +226,34 @@ function addRouteLayers(map: MapLibreMap) {
       'text-halo-color': tokens.laneWhite,
       'text-halo-width': 1.5,
     },
+  })
+
+  // Trucks follow the timeline slider; drawn last so they sit on top of everything.
+  map.addLayer({
+    id: 'truck-dots',
+    type: 'circle',
+    source: 'trucks',
+    paint: {
+      'circle-radius': 10,
+      'circle-color': ['case', ['get', 'recommended'], tokens.signGreen, tokens.asphalt],
+      'circle-stroke-color': tokens.centerLine,
+      'circle-stroke-width': 2.5,
+      'circle-opacity': ['case', ['==', ['get', 'state'], 'driving'], 1, 0.55],
+      'circle-stroke-opacity': ['case', ['==', ['get', 'state'], 'driving'], 1, 0.55],
+    },
+  })
+  map.addLayer({
+    id: 'truck-labels',
+    type: 'symbol',
+    source: 'trucks',
+    layout: {
+      'text-field': ['get', 'id'],
+      'text-font': ['Noto Sans Bold'],
+      'text-size': 11,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+    },
+    paint: { 'text-color': tokens.laneWhite },
   })
 }
 
