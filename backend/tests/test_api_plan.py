@@ -242,6 +242,14 @@ def test_suggest_returns_places_and_caches_them(fakes):
     assert tomtom.suggest_calls == 1
 
 
+def test_suggest_cache_keys_are_safe_for_any_cache_backend(fakes, recwarn):
+    fakes()
+
+    APIClient().get("/api/suggest/", {"q": "Denver, CO"})
+
+    assert not [w for w in recwarn if "CacheKeyWarning" in type(w.message).__name__]
+
+
 def test_suggest_ignores_one_letter_queries(fakes):
     tomtom, _ = fakes()
 

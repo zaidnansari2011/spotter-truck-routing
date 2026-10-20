@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import asdict
 
 from django.core.cache import cache
@@ -37,7 +38,8 @@ def suggest(request: Request) -> Response:
     text = " ".join(query.validated_data["q"].split()).lower()
     if len(text) < 2:
         return Response([])
-    key = f"suggest:v1:{text}"
+    # Hashed so spaces and commas in queries are safe for every cache backend.
+    key = "suggest:v2:" + hashlib.sha256(text.encode()).hexdigest()
     places = cache.get(key)
     if places is None:
         places = [asdict(p) for p in trip.tomtom_client().suggest(text)]
