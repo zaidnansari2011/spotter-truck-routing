@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -15,14 +15,20 @@ import TripForm from './components/TripForm.tsx'
 import { useHeatLayer } from './components/useHeatLayer.ts'
 import { useTruckLayer } from './components/useTruckLayer.ts'
 import { corridorFeatures } from './lib/heatmap.ts'
+import { decodeTrip, encodeTrip } from './lib/shareUrl.ts'
+import { nextQuarterHour } from './lib/time.ts'
 import { tokens } from './theme.ts'
 
 // Demo mode lays a simulated storm over the real forecast; every page using it says so.
 const DEMO_STORM = new URLSearchParams(window.location.search).get('demo') === 'storm'
+// A shared link opens straight onto its trip.
+const SHARED = decodeTrip(window.location.search, nextQuarterHour().format())
 
 export default function App() {
-  const [request, setRequest] = useState<PlanRequest>()
-  const [interval, setSamplingInterval] = useState<IntervalKey>('25')
+  const [request, setRequest] = useState<PlanRequest | undefined>(() =>
+    SHARED && DEMO_STORM ? { ...SHARED.request, demo: 'storm' } : SHARED?.request,
+  )
+  const [interval, setSamplingInterval] = useState<IntervalKey>(SHARED?.interval ?? '25')
   const plan = usePlan(request, interval)
   const [chosenId, setChosenId] = useState<string>()
   const [formVersion, setFormVersion] = useState(0)
@@ -56,6 +62,13 @@ export default function App() {
     },
     [setHeatTime, setTruckTime],
   )
+
+  // Keep the address in step with the trip, so it can be copied or reloaded.
+  useEffect(() => {
+    if (!request) return
+    const search = encodeTrip(request, interval, new URLSearchParams(window.location.search))
+    window.history.replaceState(null, '', `?${search}`)
+  }, [request, interval])
 
   function findRoutes(next: PlanRequest) {
     setRequest(DEMO_STORM ? { ...next, demo: 'storm' } : next)

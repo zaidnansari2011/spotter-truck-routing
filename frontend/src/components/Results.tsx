@@ -1,4 +1,8 @@
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
+import Button from '@mui/material/Button'
+import Snackbar from '@mui/material/Snackbar'
+import LinkRounded from '@mui/icons-material/LinkRounded'
 import Skeleton from '@mui/material/Skeleton'
 import Stack from '@mui/material/Stack'
 import ToggleButton from '@mui/material/ToggleButton'
@@ -37,6 +41,12 @@ export default function Results({
   const ranking = plan.ranking
   const recommended = plan.routes.find((r) => r.id === ranking.recommended_id)!
   const selected = plan.routes.find((r) => r.id === selectedId) ?? recommended
+  const [copied, setCopied] = useState(false)
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(window.location.href)
+    setCopied(true)
+  }
 
   return (
     <Stack
@@ -45,6 +55,20 @@ export default function Results({
       sx={{ mt: 3, opacity: updating ? 0.55 : 1, transition: 'opacity 150ms' }}
     >
       <RecommendationSign route={recommended} ranking={ranking} destination={destination} />
+      <Button
+        size="small"
+        startIcon={<LinkRounded />}
+        onClick={copyLink}
+        sx={{ alignSelf: 'flex-start', mt: '8px !important' }}
+      >
+        Copy link to this trip
+      </Button>
+      <Snackbar
+        open={copied}
+        autoHideDuration={2500}
+        onClose={() => setCopied(false)}
+        message="Link copied"
+      />
 
       {plan.notices.map((notice) => (
         <Alert severity="info" key={notice}>

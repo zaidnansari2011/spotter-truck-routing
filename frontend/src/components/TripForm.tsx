@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import dayjs, { type Dayjs } from 'dayjs'
+import { nextQuarterHour } from '../lib/time.ts'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -25,14 +26,6 @@ interface Props {
   busy: boolean
   onSubmit: (request: PlanRequest) => void
   initial?: PlanRequest // fills the form when a plan is re-run from the results
-}
-
-function nextQuarterHour(): Dayjs {
-  const now = dayjs()
-  return now
-    .add(15 - (now.minute() % 15), 'minute')
-    .second(0)
-    .millisecond(0)
 }
 
 export default function TripForm({ busy, onSubmit, initial }: Props) {

@@ -30,6 +30,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-024](#dr-024-trucks-on-the-timeline) | Trucks on the timeline | Accepted |
 | [DR-025](#dr-025-hours-of-service-rest-breaks) | Hours-of-service rest breaks | Accepted |
 | [DR-026](#dr-026-simulated-storm-demo-mode) | Simulated storm demo mode | Accepted |
+| [DR-027](#dr-027-shareable-trip-links) | Shareable trip links | Accepted |
 
 ---
 
@@ -580,3 +581,15 @@ The storm is applied after the real forecast is fetched and cached, so cached da
 **Wording fix found with it.** The guide sign's headline said "Fastest, with the same weather risk as the others" whenever travel time decided against the runner-up. With the storm, B and C tied on risk but A did not, so the sentence was false. It now reads "Fastest of the routes with the least weather risk", which is true in both cases.
 
 **Tests.** 10 tests for the storm (full strength at the centre is No Travel, falloff with distance, nothing outside the radius, build-up and dissipation, the ring exercising the load rules, overlay rules) and 5 API tests (no simulation without the flag, the storm hitting the fastest route and moving the recommendation, an unknown demo rejected, the corridor showing the same storm, a bad simulation block rejected).
+
+---
+
+## DR-027: Shareable trip links
+
+**Why.** A dispatcher shares a plan with a driver; a reviewer shares a scenario with a colleague. Both need the trip in the address.
+
+**How.** After each plan the address holds the trip: origin and destination (coordinates and label), departure, load, spacing and the rest-break setting, plus `demo=storm` if demo mode is on. Opening such a link fills the form and plans the trip straight away. A departure that has already passed moves to the next quarter hour, so an old link still plans the same trip. A malformed link is ignored. "Copy link to this trip" copies the address.
+
+**Precision.** Coordinates first used 5 decimals. Reopening a link then missed the server's route cache (the cache key uses the exact coordinates), TomTom recalculated with live traffic, and the result differed by 2 minutes from the original. Links now keep 6 decimals, the precision place search returns, and a reopened link reproduces the original plan exactly (checked in the browser).
+
+**Tests.** 9 unit tests (round trip including labels with commas, demo mode kept, past departures moved, five malformed links ignored, unknown spacing falling back to 25 miles) and a browser check (address updates on interval change, the clipboard holds the address, a fresh page opens on the same trip, form and spacing restored).
