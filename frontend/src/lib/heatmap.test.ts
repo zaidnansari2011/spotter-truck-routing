@@ -97,9 +97,16 @@ describe('colorExpression', () => {
 })
 
 describe('opacityExpression', () => {
-  it('keeps calm weather transparent and fades in toward Moderate', () => {
+  it('is fully transparent below Moderate, so Low areas are never tinted', () => {
     const expr = opacityExpression('snow', 0) as unknown[]
-    expect(expr.slice(3)).toEqual([30, 0, 50, 0.42, 301, 0.62])
+    expect(expr.slice(0, 2)).toEqual(['step', ['get', 'v0']])
+    expect(expr[2]).toBe(0) // below the first step
+    expect(expr[3]).toBe(50) // snow Moderate starts at 0.50 in/hr
+  })
+
+  it('gets more opaque as conditions get worse', () => {
+    const ramp = (opacityExpression('risk', 0) as unknown[])[4] as unknown[]
+    expect(ramp.slice(3)).toEqual([100, 0.3, 200, 0.45, 400, 0.62])
   })
 })
 

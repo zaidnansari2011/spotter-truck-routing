@@ -443,7 +443,7 @@ Values are floored, not rounded, so `floor(risk / 100)` always equals the discre
 
 **Decision.** Option 3:
 - Colors use the same 5 risk colors as the checkpoints and legend. Each band holds its level's color and only blends into the next over the last 10% before a threshold, so the map matches the legend everywhere except right at band edges.
-- Below Moderate the layer fades to transparent. Calm weather leaves the map clean and storms stand out.
+- Below Moderate the layer is fully transparent (a `step` expression, so blended in-between-hour values like 99.5 cannot leak color either). Calm weather leaves the map clean and storms stand out.
 - Disc radius follows the grid spacing at every zoom (exponential zoom expression). A first try at 1.1x the spacing looked blocky in the QA screenshots, so the final value is 1.8x with peak opacity 0.62, which blends neighbors into a continuous field.
 - The layer sits under the basemap's place labels and under the routes.
 
@@ -462,6 +462,8 @@ Values are floored, not rounded, so `floor(risk / 100)` always equals the discre
 | Console or page errors | 0 |
 
 Real weather on the test day was calm everywhere (nothing reached Moderate), so the rendering was also checked with a synthetic storm injected into the corridor response by the test browser only. The app code has no test hooks.
+
+**Fixed during the requirements check.** The first version faded color in from 60% of the Moderate threshold. A Key West to Miami run showed a wide yellow haze over the Keys while every checkpoint on the road was Low: values that were still Low were drawn in Moderate's yellow, contradicting the markers (DR-013). Opacity is now exactly 0 below Moderate; the same run then showed only two real Moderate cells over open water.
 
 ---
 

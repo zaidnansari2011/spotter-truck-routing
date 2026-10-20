@@ -68,9 +68,20 @@ export function colorExpression(layer: HeatLayer, t: number): ExpressionSpecific
   return ['interpolate', ['linear'], valueAt(t), ...stops] as ExpressionSpecification
 }
 
+/**
+ * Fully transparent below Moderate, so a Low area is never tinted with a warning color (the
+ * heatmap must agree with the checkpoint markers, DR-013). Opacity then rises with severity.
+ */
 export function opacityExpression(layer: HeatLayer, t: number): ExpressionSpecification {
-  const [moderate, , , noTravel] = THRESHOLDS[layer]
-  return ['interpolate', ['linear'], valueAt(t), moderate * 0.6, 0, moderate, 0.42, noTravel, 0.62]
+  const [moderate, high, , noTravel] = THRESHOLDS[layer]
+  const value = valueAt(t)
+  return [
+    'step',
+    value,
+    0,
+    moderate,
+    ['interpolate', ['linear'], value, moderate, 0.3, high, 0.45, noTravel, 0.62],
+  ]
 }
 
 /** Disc radius in pixels at each zoom: wide enough that neighbouring grid points blend smoothly. */
