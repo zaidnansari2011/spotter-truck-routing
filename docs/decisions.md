@@ -21,6 +21,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-015](#dr-015-guaranteeing-distinct-route-options) | Guaranteeing distinct route options | Accepted |
 | [DR-016](#dr-016-keep-the-api-key-out-of-logs) | Keep the API key out of logs | Accepted |
 | [DR-017](#dr-017-forecast-batching-and-caching) | Forecast batching and caching | Accepted |
+| [DR-018](#dr-018-plan-api-design) | Plan API design | Accepted |
 
 ---
 
@@ -353,3 +354,43 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 | Checkpoints with a forecast at their ETA | 578 / 578 |
 
 **Tests.** 19 tests with mocked HTTP and an isolated cache per test: request parameters and units, whole-hour window rounding, single-location responses (an object, not a list), batches of 300/300/50, de-duplication, cache hits, merging when the window grows, the 16-day horizon, and error mapping. 100% branch coverage.
+
+---
+
+## DR-018: Plan API design
+
+**One request returns all three sampling intervals.** `POST /api/plan` returns checkpoints, per-route summaries and a ranking for 10, 25 and 50 mile intervals together. Switching the interval in the UI is then instant, with no network request. The cost is a larger response, measured below.
+
+**Request validation** (each rule is a test):
+- Origin and destination: label plus lat/lon in range, at least 1 km apart.
+- Departure: ISO 8601 with an explicit UTC offset, from 15 minutes ago (a form filled in a moment ago still means "now") to 7 days ahead (forecast skill drops sharply after a week).
+- Load: 0 to 80,000 lb. Zero is allowed for an empty truck. 80,000 lb is the US federal gross limit, so no legal cargo load is above it.
+
+**Errors share one shape**, `{"code", "message", "fields"?}`, with no internal details:
+
+| Situation | Status | Code |
+|---|---|---|
+| Invalid input | 400 | `invalid_input`, plus per-field messages |
+| No road route between the places | 422 | `no_route` |
+| Too many requests from one IP | 429 | `rate_limited` |
+| TomTom or Open-Meteo failing | 502 | `routing_unavailable` / `weather_unavailable` |
+| Unexpected bug | 500 | `internal_error` (traceback logged, never returned) |
+
+**Rate limits.** 60 plans and 600 place searches per hour per IP. Generous for real use, but a refresh loop cannot burn through TomTom's daily quota.
+
+**Caching.** Routes and their simplified map geometry are cached for 10 minutes per (origin, destination, departure, gross weight). Place suggestions are cached for 24 hours per normalized query. Forecasts are cached per grid cell (DR-017).
+
+**Fewer than 3 routes.** The response carries a plain-language notice (e.g. "There are only 1 distinct road route between these places") rather than failing or padding the list.
+
+**Live results, Chicago to Denver, 38,000 lb (2026-10-21).**
+
+| Measure | Value |
+|---|---|
+| First request (routing + forecasts + scoring) | 4.6 to 4.9 s |
+| Repeat request | 0.34 s, then **0.10 s** after also caching the simplified geometry |
+| Response size | 224 KB, **38 KB gzipped** |
+| Map geometry | 816 / 1,002 / 1,305 points (from 10,712 / 13,645 / 15,820) |
+| Checkpoints per route at 10 / 25 / 50 mi | 102-135 / 42-55 / 22-28 |
+| API key occurrences in server logs | 0 |
+
+**Tests.** 30 API tests with fake routing and weather clients: calm weather (fastest route wins), a planted storm on the fastest route (recommendation moves, trade-off note appears), the same storm with a 35,000 lb load (load rule turns it into No Travel), the 40,000 vs 40,001 lb threshold through the full API, missing forecasts, 1 and 2 route results, route caching, every validation rule, every error mapping, and the rate limit. The whole backend is at 100% branch coverage.

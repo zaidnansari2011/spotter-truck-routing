@@ -91,6 +91,9 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "planner.api_errors.api_exception_handler",
+    # Protects the TomTom quota (about 2,500 requests/day) from refresh loops; generous for real use.
+    "DEFAULT_THROTTLE_RATES": {"plan": "60/hour", "suggest": "600/hour"},
 }
 
 SPECTACULAR_SETTINGS = {
