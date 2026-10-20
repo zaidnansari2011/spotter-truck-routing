@@ -17,6 +17,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-011](#dr-011-hosting-azure-container-apps) | Hosting: Azure Container Apps | Accepted |
 | [DR-012](#dr-012-stateless-backend-no-database) | Stateless backend, no database | Accepted |
 | [DR-013](#dr-013-continuous-risk-index-for-the-heatmap) | Continuous risk index for the heatmap | Accepted |
+| [DR-014](#dr-014-routes-without-a-forecast-rank-last) | Routes without a forecast rank last | Accepted |
 
 ---
 
@@ -170,6 +171,8 @@ A checkpoint takes the worst of its wind, rain and snow levels. Load rules are t
 
 **Decision.** No Travel miles are compared first, then the brief's four criteria in its order. Any route with No Travel miles is badged "Do not travel". If all three routes have No Travel segments, the app says there is no safe route at that departure time.
 
+**Tested.** Route A (10 No Travel miles, 0 Severe, faster) vs Route B (0 No Travel, 50 Severe): B is recommended, with the reason "Fewest No Travel miles: 0 mi vs 10 mi on Route A". The `all_no_travel` flag is tested both ways.
+
 ---
 
 ## DR-008: Ranking precision for average risk
@@ -194,6 +197,22 @@ Comparing exact values picks B, which drives through the same 25 rainy miles but
 3. Treat routes within a wide band (e.g. 0.1) as equal. Real balancing, but an invented constant.
 
 **Decision.** Option 2. Every recommendation can be explained from the numbers on screen. A "Why this route" panel names the deciding criterion. When the runner-up is 30+ minutes faster, a note shows that trade-off without changing the recommendation.
+
+**Same rule for miles.** Severe, High and No Travel miles are compared at 1 decimal, the precision shown in the UI. Checkpoint coverage produces values like 25.04 vs 25.0 from floating-point sums, and without rounding those would decide a ranking the screen shows as tied.
+
+**Output.** The ranking returns the full order, the recommended route, one comparison per other route naming the criterion that decided it (e.g. "Shortest travel time: 6 h 10 min vs 7 h 25 min on Route B"), and the optional trade-off note (e.g. "Route B is 2 h faster but has 30 Severe miles, average risk 0.23 (vs 20 High miles, average risk 0.10 on Route A).").
+
+**Tested.** 26 unit tests: each criterion deciding only when every earlier one ties, the exact table above (A wins on time), a visible 0.21 vs 0.20 difference beating a 3 h faster route, mile differences below 0.1 tying, full ties keeping the routing API's order, the 29 vs 30 minute trade-off threshold, and duration formatting. 100% branch coverage.
+
+**Real-data check (2026-10-21).** The 3 real Chicago to Denver truck routes, scored with live forecasts at each checkpoint's ETA (25 mi interval, 38,000 lb):
+
+| Route | Miles | Time | Checkpoints | Average risk | Max wind |
+|---|---|---|---|---|---|
+| A | 1,006.7 | 14 h 36 min | 42 | 0.00 | 13.1 mph |
+| B | 1,185.1 | 17 h 23 min | 49 | 0.00 | 11.3 mph |
+| C | 1,343.6 | 20 h 5 min | 55 | 0.00 | 12.3 mph |
+
+All risk criteria tie, so travel time decides and A is recommended, as intended. 146 checkpoints mapped to 139 forecast locations, fetched in one 1.08 s request. All domain logic for the three routes ran in 73 ms.
 
 ---
 
@@ -252,3 +271,15 @@ Comparing exact values picks B, which drives through the same 25 rainy miles but
 - `floor(index) == level` for 2,001 evenly spaced values per condition plus every edge,
 - the index never decreases as the value rises,
 - combined and load-adjusted indices agree with the assessed levels.
+
+---
+
+## DR-014: Routes without a forecast rank last
+
+**Found by a failing test.** A route whose checkpoints had no forecast at all has 0 known Severe and High miles. Under the plain ranking it beat a route with 100 real High miles, so missing data counted as safe.
+
+**Decision.** A "forecast available" check runs before every other criterion: a route with no forecast at any checkpoint ranks after every route that has one, with the reason "Forecast available: yes vs no". A route with only some checkpoints missing (e.g. a long trip running past the forecast horizon) is still ranked on its known miles, and the unknown miles are reported separately so the UI can flag them.
+
+**Why not penalize partial gaps too.** Ranking by "fewest unknown miles" first would let a route with 5 unforecast miles at the very end lose to a route with 50 known Severe miles. Showing the gap is more honest than guessing what it contains.
+
+**Tested.** Both cases are unit tests: the fully blind route ranks last, and a route with 30 unknown miles and 20 High miles still beats one with 10 Severe miles.
