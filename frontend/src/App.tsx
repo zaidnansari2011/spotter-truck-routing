@@ -1,13 +1,26 @@
+import { useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { usePlan } from './api/hooks.ts'
+import type { IntervalKey, PlanRequest } from './api/types.ts'
+import Legend from './components/Legend.tsx'
 import MapView from './components/MapView.tsx'
 import TripForm from './components/TripForm.tsx'
 import { tokens } from './theme.ts'
 
 export default function App() {
   const plan = usePlan()
+  const [interval, setInterval] = useState<IntervalKey>('25')
+  const [selectedId, setSelectedId] = useState<string>()
+
+  const ranking = plan.data?.rankings[interval]
+
+  function findRoutes(request: PlanRequest) {
+    plan.mutate(request, {
+      onSuccess: (result) => setSelectedId(result.rankings[interval].recommended_id),
+    })
+  }
 
   return (
     <Box
@@ -39,7 +52,7 @@ export default function App() {
           travel time.
         </Typography>
 
-        <TripForm busy={plan.isPending} onSubmit={(request) => plan.mutate(request)} />
+        <TripForm busy={plan.isPending} onSubmit={findRoutes} />
 
         {plan.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -48,7 +61,10 @@ export default function App() {
         )}
         {plan.data && (
           <Typography variant="body2" sx={{ mt: 2 }}>
-            {plan.data.routes.length} routes found.
+            {plan.data.routes.length} routes found. Interval {interval} mi.
+            <button type="button" onClick={() => setInterval(interval === '25' ? '10' : '25')}>
+              toggle
+            </button>
           </Typography>
         )}
       </Box>
@@ -63,7 +79,15 @@ export default function App() {
           minHeight: 280,
         }}
       >
-        <MapView />
+        <MapView
+          plan={plan.data}
+          interval={interval}
+          selectedId={selectedId}
+          recommendedId={ranking?.recommended_id}
+          onSelectRoute={setSelectedId}
+        >
+          <Legend />
+        </MapView>
       </Box>
     </Box>
   )

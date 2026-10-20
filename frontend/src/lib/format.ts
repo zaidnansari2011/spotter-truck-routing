@@ -13,7 +13,7 @@ export function formatMiles(miles: number): string {
 
 const clock = new Intl.DateTimeFormat(undefined, {
   weekday: 'short',
-  hour: '2-digit',
+  hour: 'numeric',
   minute: '2-digit',
 })
 const zone = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' })
