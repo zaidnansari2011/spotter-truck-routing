@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography'
 import { useCorridor, usePlan } from './api/hooks.ts'
 import type { HeatLayer, IntervalKey, PlanRequest } from './api/types.ts'
 import DemoBanner from './components/DemoBanner.tsx'
+import HowItWorks from './components/HowItWorks.tsx'
 import Legend from './components/Legend.tsx'
 import MapView from './components/MapView.tsx'
 import Results, { ResultsSkeleton } from './components/Results.tsx'
@@ -117,10 +118,11 @@ export default function App() {
         <Typography variant="h1" component="h1">
           Weather-Aware Truck Routing
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 3 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
           Compare three truck routes by forecast weather at your arrival time, load weight and
           travel time.
         </Typography>
+        <HowItWorks />
 
         {DEMO_STORM && <DemoBanner />}
 
