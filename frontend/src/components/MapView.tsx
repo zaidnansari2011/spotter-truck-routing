@@ -269,6 +269,8 @@ function addRouteLayers(map: MapLibreMap) {
     id: 'truck-dots',
     type: 'circle',
     source: 'trucks',
+    // A truck that has arrived leaves the map; the timeline says when it arrived.
+    filter: ['!=', ['get', 'state'], 'arrived'],
     paint: {
       'circle-radius': 10,
       'circle-color': ['case', ['get', 'recommended'], tokens.signGreen, tokens.asphalt],
@@ -282,6 +284,7 @@ function addRouteLayers(map: MapLibreMap) {
     id: 'truck-labels',
     type: 'symbol',
     source: 'trucks',
+    filter: ['!=', ['get', 'state'], 'arrived'],
     layout: {
       'text-field': ['get', 'id'],
       'text-font': ['Noto Sans Bold'],

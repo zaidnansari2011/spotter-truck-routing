@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Checkpoint, Plan, RouteOption } from '../api/types.ts'
 import { haversineMi } from './mapData.ts'
-import { buildTracks, truckAt, truckFeatures } from './trucks.ts'
+import { arrivalNote, buildTracks, groupArrivals, truckAt, truckFeatures } from './trucks.ts'
 
 const DEG_MI = haversineMi([0, 0], [1, 0])
 const DEPART = Date.parse('2026-10-22T12:00:00Z') / 1000
@@ -62,5 +62,50 @@ describe('truckFeatures', () => {
   it('has one point per route with its state and recommendation', () => {
     const fc = truckFeatures([track], DEPART + 3600)
     expect(fc.features[0].properties).toEqual({ id: 'A', recommended: true, state: 'driving' })
+  })
+})
+
+describe('arrivalNote', () => {
+  const list = [
+    { id: 'A', ts: 100, recommended: true },
+    { id: 'B', ts: 200, recommended: false },
+    { id: 'C', ts: 300, recommended: false },
+  ]
+
+  it('says nothing while every truck is still on the road', () => {
+    expect(arrivalNote(list, 99)).toBeUndefined()
+  })
+
+  it('names the trucks that have arrived', () => {
+    expect(arrivalNote(list, 100)).toBe('Route A has arrived')
+    expect(arrivalNote(list, 250)).toBe('Routes A and B have arrived')
+  })
+
+  it('says when the map shows only the forecast', () => {
+    expect(arrivalNote(list, 300)).toBe('All trucks have arrived; the map shows only the forecast')
+    expect(arrivalNote(list.slice(0, 1), 100)).toBe(
+      'The truck has arrived; the map shows only the forecast',
+    )
+  })
+})
+
+describe('groupArrivals', () => {
+  const at = (id: string, hours: number) => ({ id, ts: hours * 3600, recommended: false })
+
+  it('places arrivals in hours from the slider start, earliest first', () => {
+    const groups = groupArrivals([at('B', 20), at('A', 14)], 0)
+    expect(groups.map((g) => [g.hour, g.items.map((a) => a.id)])).toEqual([
+      [14, ['A']],
+      [20, ['B']],
+    ])
+  })
+
+  it('shares a flag between arrivals close together', () => {
+    const groups = groupArrivals([at('A', 14), at('B', 16.5), at('C', 16.75)], 0)
+    expect(groups.map((g) => g.items.map((a) => a.id))).toEqual([['A'], ['B', 'C']])
+  })
+
+  it('leaves out arrivals outside the window', () => {
+    expect(groupArrivals([at('A', 2), at('B', 60)], 3 * 3600)).toEqual([])
   })
 })

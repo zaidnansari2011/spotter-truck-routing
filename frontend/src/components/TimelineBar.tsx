@@ -15,6 +15,7 @@ import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded'
 import type { HeatLayer } from '../api/types.ts'
 import { formatClock, formatDuration, timeZoneName } from '../lib/format.ts'
 import { FRAME_COUNT, HEAT_LAYERS, THRESHOLDS } from '../lib/heatmap.ts'
+import { arrivalNote, groupArrivals, type Arrival } from '../lib/trucks.ts'
 import { tokens } from '../theme.ts'
 
 export type Anchor = 'departure' | 'now'
@@ -35,6 +36,7 @@ interface Props {
   layer: HeatLayer
   onLayerChange: (layer: HeatLayer) => void
   onTimeChange: (frameIndex: number, momentTs: number | undefined) => void
+  arrivals?: Arrival[] // when each route's truck reaches the destination
 }
 
 function thresholdHint(layer: HeatLayer): string {
@@ -55,6 +57,7 @@ export default function TimelineBar({
   layer,
   onLayerChange,
   onTimeChange,
+  arrivals = [],
 }: Props) {
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -141,7 +144,16 @@ export default function TimelineBar({
         >
           {playing ? <PauseRounded /> : <PlayArrowRounded />}
         </IconButton>
-        <Box sx={{ flex: 1, minWidth: 0, px: 1 }}>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            px: 1,
+            pt: arrivals.length ? 2 : 0, // room for the arrival flags above the track
+            position: 'relative',
+          }}
+        >
+          {ready && startTs !== undefined && <ArrivalFlags arrivals={arrivals} startTs={startTs} />}
           <Slider
             value={time}
             min={0}
@@ -204,7 +216,9 @@ export default function TimelineBar({
                 {formatClock(moment)} {timeZoneName(moment)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {relative}. {thresholdHint(layer)}
+                {[relative, arrivalNote(arrivals, moment), thresholdHint(layer)]
+                  .filter(Boolean)
+                  .join('. ')}
               </Typography>
             </>
           )}
@@ -249,5 +263,52 @@ export default function TimelineBar({
         </Box>
       </Box>
     </Paper>
+  )
+}
+
+/** A route letter above the slider at the hour each truck arrives, so the trip's end is visible. */
+function ArrivalFlags({ arrivals, startTs }: { arrivals: Arrival[]; startTs: number }) {
+  return (
+    <Box aria-hidden sx={{ position: 'absolute', left: 8, right: 8, top: 0, height: 26 }}>
+      {groupArrivals(arrivals, startTs).map((group) => {
+        const hour = group.hour
+        const color =
+          group.items.length === 1 && group.items[0].recommended ? tokens.signGreen : tokens.asphalt
+        return (
+          <Box
+            key={group.items[0].id}
+            title={group.items.map((a) => `Route ${a.id} arrives ${formatClock(a.ts)}`).join('\n')}
+            sx={{
+              position: 'absolute',
+              left: `${(hour / LAST_HOUR) * 100}%`,
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
+            <Box
+              sx={{
+                minWidth: 16,
+                height: 16,
+                px: group.items.length > 1 ? '5px' : 0,
+                borderRadius: '8px',
+                whiteSpace: 'nowrap',
+                bgcolor: color,
+                color: tokens.laneWhite,
+                fontSize: 10,
+                fontWeight: 800,
+                lineHeight: '16px',
+                textAlign: 'center',
+              }}
+            >
+              {group.items.map((a) => a.id).join(' ')}
+            </Box>
+            {/* A short stem from the letter down to the track. */}
+            <Box sx={{ width: 2, height: 8, bgcolor: color }} />
+          </Box>
+        )
+      })}
+    </Box>
   )
 }

@@ -18,6 +18,7 @@ import { useTruckLayer } from './components/useTruckLayer.ts'
 import { corridorFeatures } from './lib/heatmap.ts'
 import { decodeTrip, encodeTrip } from './lib/shareUrl.ts'
 import { nextQuarterHour } from './lib/time.ts'
+import { arrivals } from './lib/trucks.ts'
 import { tokens } from './theme.ts'
 
 // Demo mode lays a simulated storm over the real forecast; every page using it says so.
@@ -214,6 +215,7 @@ export default function App() {
           layer={heatLayer}
           onLayerChange={setHeatLayer}
           onTimeChange={setTimelineTime}
+          arrivals={data ? arrivals(data) : undefined}
         />
       </Box>
     </Box>
