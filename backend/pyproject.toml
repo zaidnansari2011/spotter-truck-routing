@@ -16,3 +16,4 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "DJ"]
 
 [tool.coverage.run]
 source = ["planner"]
+branch = true

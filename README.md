@@ -4,6 +4,8 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 
 **Live app:** [truck-routing.zaidansari.tech](https://truck-routing.zaidansari.tech) &nbsp;|&nbsp; **Walkthrough video:** _link added after recording_
 
+**Jump to:** [how routes are compared](#how-the-recommendation-is-made) | [run it locally](#run-it-locally) | [tests](#tests-and-quality) | [decision log](docs/decisions.md)
+
 ![Chicago to Denver: three truck routes, the recommended route as a guide sign, checkpoints with arrival times, and the forecast timeline](docs/images/app-desktop.png)
 
 <details>
@@ -23,7 +25,9 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 | Risk from the wind, rain and snow table plus the load rules | Every checkpoint shows its level, the condition that set it, and any load rule that raised it |
 | Recommend the best route, balancing risk and travel time | The guide sign at the top, the "Why Route A" panel, and a note when a riskier route is much faster |
 | All routes, checkpoints, risk levels, ETAs and summaries on a map | Route lines (the selected one colored by risk), checkpoint dots with arrival times, popups, and a summary chip per route |
-| Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button with 1, 2 or 6 forecast hours a second, and layers for risk for this load (the default, so the shading agrees with the checkpoint dots), weather only, wind, rain and snow |
+| Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes; slider in 15 minute steps with play (1, 2 or 6 forecast hours a second) and a flag where each truck arrives |
+| | Layers: risk for your load (default, matches the checkpoint dots), weather only, wind, rain, snow |
+| Clear explanation | "How it works" under the title: risk table, load rules, ranking order and what the map shows |
 | Extra: best time to leave | Re-scores the routes for departures up to 24 hours later and suggests the safest one ([DR-022](docs/decisions.md#dr-022-departure-time-advisor)) |
 | Extra: trucks on the timeline | A marker per route moves with the forecast slider, so you can watch each truck meet the weather ([DR-024](docs/decisions.md#dr-024-trucks-on-the-timeline)) |
 | Extra: required rest breaks | Optional hours-of-service breaks added to arrival times, which changes the forecast at each checkpoint ([DR-025](docs/decisions.md#dr-025-hours-of-service-rest-breaks)) |
@@ -65,28 +69,19 @@ The brief leaves a few things open. Each choice below is a named constant in the
 
 ## Performance
 
-Measured on the production build ([DR-018](docs/decisions.md#dr-018-plan-api-design), [DR-020](docs/decisions.md#dr-020-heatmap-rendering-and-the-timeline-slider)):
+Production build on a laptop, and the hosted app measured from India ([DR-020](docs/decisions.md#dr-020-heatmap-rendering-and-the-timeline-slider), [DR-029](docs/decisions.md#dr-029-review-against-a-scoring-checklist)):
 
-| | |
-|---|---|
-| Plan, first request (Chicago to Denver, 3 routes, 25 mile checkpoints) | about 5 s, mostly TomTom routing |
-| Switching to another checkpoint spacing | 0.7 s; back to one already seen: instant |
-| Plan, repeated within 10 minutes | 0.10 s |
-| Plan response | 38 KB gzipped |
-| Heatmap data (260 grid points x 49 hours) | about 0.5 s first time, 0.2 s cached |
-| Timeline playback | 127 fps in headless Edge, worst frame 16 ms |
-| Requests while dragging the slider | 0. The 49 hourly frames are on the map already and the GPU blends between hours |
+| | Local | Hosted |
+|---|---|---|
+| New trip, nothing cached (3 routes, 25 mile checkpoints) | about 5 s, mostly TomTom routing | 5.2 s |
+| Same trip again (cached) | 0.10 s | 0.6 s |
+| Heatmap frames (about 250 grid points x 49 hours) | 0.5 s | 1.1 s |
+| Three different trips at the same moment | | all done in 5.0 s, no errors |
+| Switching checkpoint spacing | 0.7 s; instant for one already seen | |
+| Timeline playback | 127 fps, worst frame 16 ms (headless Edge) | |
+| Requests while dragging the slider | 0: the 49 hourly frames are already on the map and the GPU blends between hours | |
 
 Forecasts are cached per 5 km grid cell for 30 minutes, so toggling the timeline start or planning a similar trip reuses them ([DR-017](docs/decisions.md#dr-017-forecast-batching-and-caching)).
-
-Measured on the hosted app (Azure Container Apps, 0.5 vCPU, one replica) from India on 2026-10-21 ([DR-029](docs/decisions.md#dr-029-review-against-a-scoring-checklist)):
-
-| | |
-|---|---|
-| New trip, nothing cached (Dallas to Atlanta) | 5.2 s |
-| Same trip again | 0.6 s |
-| Heatmap frames, 253 points x 49 hours | 1.1 s |
-| Three different trips sent at the same moment | each 3.9 to 5.0 s, all three done in 5.0 s, no errors |
 
 ## Architecture
 
@@ -98,14 +93,12 @@ Browser: React, TypeScript, Material UI, MapLibre GL (WebGL map)
 Django + Django REST Framework (stateless, no database)
    planner/domain/     pure logic, no I/O: geometry, checkpoints, forecast timing, risk, ranking, corridor grid
    planner/services/   TomTom and Open-Meteo clients, trip planning, heatmap frames
-   Redis cache         routes, forecasts per grid cell and hour, place search
+   Cache               routes, forecasts per grid cell and hour, place search (in memory, or Redis)
 ```
 
 One Docker image serves both the API and the built frontend. OpenAPI docs are at `/api/docs/`.
 
-**Why there is no database.** Nothing the app shows belongs to a user or needs to outlive a forecast: routes and weather come from the APIs and go stale within hours. Storing them would add migrations and indexes with nothing to query. What should be reused is cached instead (Redis when `REDIS_URL` is set, otherwise in memory): routes for 10 minutes, forecasts per 0.05° cell for 30 minutes, place search for 24 hours. Upstream calls are batched rather than made one per point: checkpoints and grid points that share a cell are fetched once, in requests of up to 300 locations. See [DR-012](docs/decisions.md#dr-012-stateless-backend-no-database).
-
-Caching is not a database replacement in general; it fits here because there are no records to keep. Saved trips or user accounts would change that: a Postgres database with a `Trip` table (owner, origin, destination, departure, load, spacing), an index on owner and creation time, and auth on the API. Forecasts would still not be stored, since a saved trip would be re-planned when opened.
+**Why there is no database.** Nothing the app shows belongs to a user or outlives a forecast, so there are no records to keep. Reusable results are cached instead (routes 10 minutes, forecasts per 0.05° cell 30 minutes, place search 24 hours), and points that share a weather cell are fetched once, in batches of up to 300 locations. Saved trips or accounts would change this: a Postgres `Trip` table indexed by owner, plus auth ([DR-012](docs/decisions.md#dr-012-stateless-backend-no-database)).
 
 **Errors.** Every error is JSON `{"code", "message"}` (plus `fields` for invalid input), and the page shows the message:
 
@@ -118,28 +111,38 @@ Caching is not a database replacement in general; it fits here because there are
 | 503 | `weather_busy` | Open-Meteo's free quota is used up for the moment; try again shortly |
 | 500 | `internal_error` | Anything unexpected (logged) |
 
+Rate limits per address: plans 60 an hour, place search 600 an hour, heatmap frames 120 an hour.
+
+## Hosting
+
+Azure Container Apps in Central India: one Docker image, 0.5 vCPU and 1 GiB, at least one replica always running so there is no cold start. The TomTom key and Django secret are Container Apps secrets. The cache is in memory per worker. `deploy/azure-container-apps.sh` builds the image in Azure Container Registry and creates or updates the app ([DR-030](docs/decisions.md#dr-030-hosting-as-deployed)).
+
 ## Tests and quality
 
-- **Backend:** 217 pytest tests, 100% branch coverage. The risk table edges, load rules, ranking order, arrival-time interpolation and forecast-hour matching all have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
-- **Frontend:** 43 Vitest tests for formatting, map geometry, popups and the heatmap color, opacity and radius expressions.
+- **Backend:** 276 pytest tests, 100% branch coverage. Every risk threshold is tested just below and exactly at its edge, as are both load rules (30,000 vs 30,001 lb, 40,000 vs 40,001 lb). Ranking order, arrival-time interpolation and forecast-hour matching have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
+- **Frontend:** 67 Vitest tests for formatting, map geometry and chip placement, popups, the heatmap expressions, the recommendation wording, share links and truck positions.
 - **Browser checks:** the production build was driven in headless Edge for the example trip, a one-road trip (Key West to Miami), an unroutable trip (Honolulu to Denver), validation errors, phone width and keyboard order, with no console errors. This found and fixed a map-worker bug that only showed in production builds ([DR-021](docs/decisions.md#dr-021-browser-qa-and-the-production-map-worker)).
-- **CI:** GitHub Actions runs ruff, pytest, oxlint, Prettier, Vitest, the TypeScript build and the Docker build on every push.
+- **CI:** GitHub Actions runs ruff, pytest, oxlint, Prettier, Vitest, the TypeScript build and the Docker build on every push to `main` and every pull request.
 
 ## Run it locally
 
 You need Python 3.10+, Node 22 and a free TomTom API key from [my.tomtom.com](https://my.tomtom.com).
 
-```bash
-cp .env.example .env            # set TOMTOM_API_KEY
+Copy `.env.example` to `.env` and put your key in `TOMTOM_API_KEY`. The other defaults are set for local use.
 
-# API on http://127.0.0.1:8000
+Terminal 1, the API on http://127.0.0.1:8000:
+
+```bash
 cd backend
 python -m venv .venv
-.venv/Scripts/activate          # Windows; use source .venv/bin/activate on macOS or Linux
+source .venv/bin/activate       # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 python manage.py runserver
+```
 
-# App on http://localhost:5173 (forwards /api to the backend)
+Terminal 2, the app on http://localhost:5173 (it forwards `/api` to the backend):
+
+```bash
 cd frontend
 npm install
 npm run dev
@@ -160,7 +163,7 @@ docker run --rm -p 8000:8000 --env-file .env weather-truck-routing
 | `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Production host names |
 | `REDIS_URL` | Optional. Without it an in-memory cache is used |
 
-Run the tests with `cd backend && pytest` and `cd frontend && npm test`.
+Run the tests with `pytest` in `backend` (with the virtual environment active) and `npm test` in `frontend`. They need no API key and make no network calls.
 
 ## Known limitations
 

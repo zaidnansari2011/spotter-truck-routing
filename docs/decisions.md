@@ -2,6 +2,8 @@
 
 Every significant choice in this project, with the options considered, what was tested, the measured results, and why the final option won. Newest entries at the bottom. Measurements were taken from a development machine unless noted, so absolute latencies are indicative.
 
+**Where to start.** For the scoring logic: [DR-006](#dr-006-interpreting-the-risk-table-boundaries) (risk table edges), [DR-007](#dr-007-no-travel-in-the-ranking) (No Travel and miles), [DR-003](#dr-003-checkpoint-etas-from-tomtom-progress-data) and [DR-005](#dr-005-which-weather-fields-and-how-to-align-them-with-etas) (weather at the arrival time), [DR-014](#dr-014-routes-without-a-forecast-rank-last) (missing forecasts). For performance: [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider) and [DR-023](#dr-023-staying-inside-the-free-weather-quota). For the final review: [DR-029](#dr-029-review-against-a-scoring-checklist).
+
 | # | Decision | Status |
 |---|---|---|
 | [DR-001](#dr-001-routing-provider-tomtom-truck-routing) | Routing provider: TomTom truck routing | Accepted |
@@ -12,17 +14,17 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-006](#dr-006-interpreting-the-risk-table-boundaries) | Risk table boundaries | Accepted |
 | [DR-007](#dr-007-no-travel-in-the-ranking) | No Travel in the ranking | Accepted |
 | [DR-008](#dr-008-ranking-precision-for-average-risk) | Ranking precision for average risk | Accepted |
-| [DR-009](#dr-009-forecast-slider-start-time) | Forecast slider start time | Accepted |
+| [DR-009](#dr-009-forecast-slider-start-time) | Forecast slider start time | Accepted, revised by DR-019 |
 | [DR-010](#dr-010-map-rendering-maplibre-gl) | Map rendering: MapLibre GL | Accepted |
-| [DR-011](#dr-011-hosting-azure-container-apps) | Hosting: Azure Container Apps | Accepted |
+| [DR-011](#dr-011-hosting-azure-container-apps) | Hosting: Azure Container Apps | Accepted, revised by DR-030 |
 | [DR-012](#dr-012-stateless-backend-no-database) | Stateless backend, no database | Accepted |
 | [DR-013](#dr-013-continuous-risk-index-for-the-heatmap) | Continuous risk index for the heatmap | Accepted |
 | [DR-014](#dr-014-routes-without-a-forecast-rank-last) | Routes without a forecast rank last | Accepted |
 | [DR-015](#dr-015-guaranteeing-distinct-route-options) | Guaranteeing distinct route options | Accepted |
 | [DR-016](#dr-016-keep-the-api-key-out-of-logs) | Keep the API key out of logs | Accepted |
 | [DR-017](#dr-017-forecast-batching-and-caching) | Forecast batching and caching | Accepted |
-| [DR-018](#dr-018-plan-api-design) | Plan API design | Accepted |
-| [DR-019](#dr-019-corridor-heatmap-data) | Corridor heatmap data | Accepted |
+| [DR-018](#dr-018-plan-api-design) | Plan API design | Accepted, revised by DR-023 |
+| [DR-019](#dr-019-corridor-heatmap-data) | Corridor heatmap data | Accepted, revised by DR-023 and DR-029 |
 | [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider) | Heatmap rendering and the timeline slider | Accepted |
 | [DR-021](#dr-021-browser-qa-and-the-production-map-worker) | Browser QA and the production map worker | Accepted |
 | [DR-022](#dr-022-departure-time-advisor) | Departure-time advisor | Accepted |
@@ -33,6 +35,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-027](#dr-027-shareable-trip-links) | Shareable trip links | Accepted |
 | [DR-028](#dr-028-layout-and-map-label-review) | Layout and map label review | Accepted |
 | [DR-029](#dr-029-review-against-a-scoring-checklist) | Review against a scoring checklist | Accepted |
+| [DR-030](#dr-030-hosting-as-deployed) | Hosting as deployed | Accepted |
 
 ---
 
@@ -252,13 +255,15 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 
 **Context.** UI, map and heatmap smoothness is 40% of the evaluation. The slider must update the heatmap while dragging.
 
-**Decision.** MapLibre GL JS (WebGL) with OpenFreeMap vector tiles, so there is no map token in the browser. The heatmap is one data source holding all 49 hourly frames. The slider changes only the layer's paint expression, so dragging triggers no network requests and no data re-upload, just GPU work. Results will be measured and added here.
+**Decision.** MapLibre GL JS (WebGL) with OpenFreeMap vector tiles, so there is no map token in the browser. The heatmap is one data source holding all 49 hourly frames. The slider changes only the layer's paint expression, so dragging triggers no network requests and no data re-upload, just GPU work. Measured results are in [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider).
 
 ---
 
 ## DR-011: Hosting: Azure Container Apps
 
-**Decision.** One Docker image (Django serving the built React app) on Azure Container Apps with at least 1 replica always running, so reviewers never hit a cold start. Redis on Azure Managed Redis, with an in-memory fallback so a cache outage cannot break the app. Secrets live in Container Apps secrets, never in the image or the repo.
+**Decision.** One Docker image (Django serving the built React app) on Azure Container Apps with at least 1 replica always running, so reviewers never hit a cold start. Redis on Azure Managed Redis, with an in-memory fallback so a cache outage cannot break the app.
+
+**Update.** The deployed app uses the in-memory cache, not Redis; see [DR-030](#dr-030-hosting-as-deployed). Secrets live in Container Apps secrets, never in the image or the repo.
 
 ---
 
@@ -266,7 +271,7 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 
 **Context.** Every plan is computed from the request (places, departure, load) plus live routing and forecast data. Nothing has to be stored per user.
 
-**Decision.** No database and no auth. Django runs with `DATABASES = {}`, and Redis caches the slow upstream calls (routes per request, forecasts per location and hour). If Redis is unreachable, cache errors are treated as misses, so the app keeps working, only slower.
+**Decision.** No database and no auth. Django runs with `DATABASES = {}`, and Redis caches the slow upstream calls (routes per request, forecasts per location and hour). If Redis is unreachable, cache errors are treated as misses, so the app keeps working, only slower. Without `REDIS_URL` the same code uses Django's in-memory cache, which is what the hosted app does ([DR-030](#dr-030-hosting-as-deployed)).
 
 **Result.** Simpler deployment (one container plus a cache), nothing to migrate, and the app scales horizontally without coordination. Verified locally: one Django process serves the built React app at `/`, the API at `/api/health/`, and OpenAPI docs at `/api/docs/`.
 
@@ -354,7 +359,7 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 - **16-day horizon.** The request window is clipped to Open-Meteo's limit, so hours past it come back as unknown instead of the whole request failing.
 - **Errors** (HTTP errors, timeouts, a location-count mismatch) raise one `WeatherError` with Open-Meteo's reason, which the API maps to a clear 502.
 
-**Bug found by measuring.** The first live run made an HTTP request even when everything should have been cached. Django's in-memory cache keeps only 300 entries by default and silently evicts the rest, and this one trip needed 414 cells. Production uses Redis (no such limit), but the in-memory fallback is now set to 10,000 entries (roughly 50 MB at most).
+**Bug found by measuring.** The first live run made an HTTP request even when everything should have been cached. Django's in-memory cache keeps only 300 entries by default and silently evicts the rest, and this one trip needed 414 cells. Redis has no such limit, and the in-memory cache, which the hosted app uses ([DR-030](#dr-030-hosting-as-deployed)), is now set to 10,000 entries (roughly 50 MB at most).
 
 **Live results (Chicago to Denver, 2026-10-21).**
 
@@ -393,6 +398,8 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 
 **Caching.** Routes and their simplified map geometry are cached for 10 minutes per (origin, destination, departure, gross weight). Place suggestions are cached for 24 hours per normalized query. Forecasts are cached per grid cell (DR-017).
 
+**Rate limits per address.** Plans 60 an hour, place search 600 an hour, heatmap frames 120 an hour; above that the API answers 429 with the wait time.
+
 **Fewer than 3 routes.** The response carries a plain-language notice (e.g. "There are only 1 distinct road route between these places") rather than failing or padding the list.
 
 **Live results, Chicago to Denver, 38,000 lb (2026-10-21).**
@@ -411,6 +418,8 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 ---
 
 ## DR-019: Corridor heatmap data
+
+**Revised later.** The grid cap below (600 points) became 300 in [DR-023](#dr-023-staying-inside-the-free-weather-quota) to stay inside the free weather quota, and the default layer became "Risk for this load" in [DR-029](#dr-029-review-against-a-scoring-checklist). The text below is the original decision.
 
 **Grid.** Every point within 30 miles of any of the 3 routes, on a regular grid. Spacing is the finest multiple of 0.05 degrees that keeps the grid at or under 600 points, so grid points line up exactly with the forecast cache cells (DR-017) and fit in two Open-Meteo batches. Short trips get a fine grid (Dallas to Fort Worth), long trips a coarser one (Chicago to Denver: 425 points at 0.35 degrees, about 35 km).
 
@@ -615,6 +624,7 @@ The rest-break note under the switch is now one line.
 **Follow-up: trip end on the timeline.** The slider covers the 48 hour forecast, but trips end sooner (14 to 20 hours for Chicago to Denver). Past the last arrival the trucks sat stacked on the destination while the slider kept moving, which read as the two being out of step. Now each route's arrival is a lettered flag above the track (arrivals under 1.5 h apart share one flag), the status line says which trucks have arrived ("All trucks have arrived; the map shows only the forecast"), and an arrived truck leaves the map. 6 unit tests; checked in the browser at 16 h (A arrived, B and C driving) and 48 h.
 
 **Checks.** Type check, lint, format and 61 unit tests pass. A browser tour (desktop 1440 x 900 and phone 390 x 844) covers the summary, route list, advisor hover and select, checkpoint popup, playback, layers, edit trip and storm mode, with no page or console errors.
+
 ---
 
 ## DR-029: Review against a scoring checklist
@@ -630,3 +640,24 @@ The rest-break note under the switch is now one line.
 | Heatmap agrees with the checkpoints | **Did not.** The default heatmap layer was weather risk without the load rules, while the dots include them. At 35,000 lb in 50 mph wind a dot was No Travel over a Severe-colored area | Default layer is now "Risk for this load"; the other is labelled "Weather only (no load rules)". The legend says the dots show weather when the truck gets there and the shading shows the time on the slider |
 | Real latency, not only call counts | Measured on the hosted app: new trip 5.2 s, repeat 0.6 s, heatmap 1.1 s, three concurrent new trips all done in 5.0 s without errors. Provider failures, timeouts and each kind of rate limit are covered by tests (502, 503 with a retry on the per-minute limit) | Numbers added to the README |
 | Cache policy and what changes with accounts | Expiry per cache is explicit (10 min, 30 min, 24 h); a cache outage is treated as a miss | README now says what a database would look like if saved trips or accounts were added |
+---
+
+## DR-030: Hosting as deployed
+
+**Plan (DR-011).** Azure Container Apps in East US, built with `az containerapp up`, Redis for the cache.
+
+**What changed and why.**
+
+| Step | Found | Done |
+|---|---|---|
+| Region | The Azure for Students subscription only allows Central India, Korea Central, Malaysia West, India South Central and UAE North | Central India. The server calls TomTom and Open-Meteo itself and map tiles come from a CDN, so the region adds little to what a reviewer waits for |
+| Image build | Local Docker was not available | Built in the cloud with `az acr build` (Azure Container Registry, Basic). `.dockerignore` keeps `.env` out of the upload |
+| Environment | The CLI created an "express" Container Apps environment, which does not support custom domains, and the subscription allows only one standard environment, already used by another project | The app runs in that existing standard environment as a separate app in its own resource group, so it can be removed without touching anything else |
+| Cache | Redis would be a second paid service for a stateless app with light traffic | In-memory cache per worker (2 gunicorn workers, 1 replica, up to 2). A cold worker only means one slower first request |
+| Domain | | `truck-routing.zaidansari.tech`: a CNAME and an `asuid` TXT record, with an Azure managed certificate (HTTPS) |
+
+**Settings.** 0.5 vCPU and 1 GiB, minimum 1 replica so there is never a cold start, maximum 2. The TomTom key and Django secret are Container Apps secrets referenced by environment variables. `DJANGO_DEBUG=false`, allowed hosts limited to the two host names.
+
+**Cost.** About INR 350 a week (one mostly idle replica plus the registry), at most about INR 900 a week if the app were busy around the clock.
+
+**Result.** Health check, home page and API docs return 200 on the custom domain. The browser tour (desktop and phone) runs with no page or console errors. Latency is in [DR-029](#dr-029-review-against-a-scoring-checklist): a new trip 5.2 s, a repeat 0.6 s, three concurrent trips all done in 5.0 s. `deploy/azure-container-apps.sh` reproduces the build and update steps.
