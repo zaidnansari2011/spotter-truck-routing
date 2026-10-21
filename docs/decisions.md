@@ -661,3 +661,5 @@ The rest-break note under the switch is now one line.
 **Cost.** About INR 350 a week (one mostly idle replica plus the registry), at most about INR 900 a week if the app were busy around the clock.
 
 **Result.** Health check, home page and API docs return 200 on the custom domain. The browser tour (desktop and phone) runs with no page or console errors. Latency is in [DR-029](#dr-029-review-against-a-scoring-checklist): a new trip 5.2 s, a repeat 0.6 s, three concurrent trips all done in 5.0 s. `deploy/azure-container-apps.sh` reproduces the build and update steps.
+
+**Flaky test found while checking the setup steps.** On a clean clone one storm test failed: the storm is sampled hourly and wind is interpolated to the arrival time, so its peak reaches the truck at 53 to 62 mph depending on the minute the test runs, and the test expected No Travel from wind alone. It now uses a 35,000 lb load (45 to 54 mph is No Travel above 30,000 lb) and runs at four fixed departures, on the hour and at 15, 30 and 45 minutes past. The app's behaviour was correct; only the test depended on the clock.

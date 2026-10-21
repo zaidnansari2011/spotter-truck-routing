@@ -398,10 +398,16 @@ def test_weather_is_never_simulated_without_the_demo_flag(fakes):
     assert {c["level"] for r in data["routes"] for c in r["checkpoints"]} == {"Low"}
 
 
-def test_demo_storm_hits_the_fastest_route_and_is_reported(fakes):
+@pytest.mark.parametrize("minutes_past_hour", [0, 15, 30, 45])
+def test_demo_storm_hits_the_fastest_route_and_is_reported(fakes, minutes_past_hour):
     fakes()
+    # The storm is sampled hourly and wind is interpolated to the arrival time, so its peak
+    # reaches the truck as 53 to 62 mph depending on the minute. Over 30,000 lb all of that is
+    # No Travel, which keeps the test independent of the clock; every quarter hour is covered.
+    next_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    departure = next_hour + timedelta(hours=2, minutes=minutes_past_hour)
 
-    data = post(body(demo="storm", interval_mi=10)).json()
+    data = post(body(demo="storm", interval_mi=10, load_lb=35_000, departure=departure.isoformat())).json()
 
     sim = data["simulation"]
     assert sim["center"][0] == pytest.approx(-98.0, abs=0.05)  # 40% along route A (-100 to -95)

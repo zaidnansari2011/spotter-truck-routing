@@ -119,7 +119,7 @@ Azure Container Apps in Central India: one Docker image, 0.5 vCPU and 1 GiB, at 
 
 ## Tests and quality
 
-- **Backend:** 276 pytest tests, 100% branch coverage. Every risk threshold is tested just below and exactly at its edge, as are both load rules (30,000 vs 30,001 lb, 40,000 vs 40,001 lb). Ranking order, arrival-time interpolation and forecast-hour matching have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
+- **Backend:** 279 pytest tests, 100% branch coverage. Every risk threshold is tested just below and exactly at its edge, as are both load rules (30,000 vs 30,001 lb, 40,000 vs 40,001 lb). Ranking order, arrival-time interpolation and forecast-hour matching have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
 - **Frontend:** 67 Vitest tests for formatting, map geometry and chip placement, popups, the heatmap expressions, the recommendation wording, share links and truck positions.
 - **Browser checks:** the production build was driven in headless Edge for the example trip, a one-road trip (Key West to Miami), an unroutable trip (Honolulu to Denver), validation errors, phone width and keyboard order, with no console errors. This found and fixed a map-worker bug that only showed in production builds ([DR-021](docs/decisions.md#dr-021-browser-qa-and-the-production-map-worker)).
 - **CI:** GitHub Actions runs ruff, pytest, oxlint, Prettier, Vitest, the TypeScript build and the Docker build on every push to `main` and every pull request.
