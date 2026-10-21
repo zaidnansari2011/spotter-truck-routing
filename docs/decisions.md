@@ -611,4 +611,6 @@ The storm is applied after the real forecast is fetched and cached, so cached da
 
 The rest-break note under the switch is now one line.
 
+**Follow-up: trip end on the timeline.** The slider covers the 48 hour forecast, but trips end sooner (14 to 20 hours for Chicago to Denver). Past the last arrival the trucks sat stacked on the destination while the slider kept moving, which read as the two being out of step. Now each route's arrival is a lettered flag above the track (arrivals under 1.5 h apart share one flag), the status line says which trucks have arrived ("All trucks have arrived; the map shows only the forecast"), and an arrived truck leaves the map. 6 unit tests; checked in the browser at 16 h (A arrived, B and C driving) and 48 h.
+
 **Checks.** Type check, lint, format and 61 unit tests pass. A browser tour (desktop 1440 x 900 and phone 390 x 844) covers the summary, route list, advisor hover and select, checkpoint popup, playback, layers, edit trip and storm mode, with no page or console errors.
