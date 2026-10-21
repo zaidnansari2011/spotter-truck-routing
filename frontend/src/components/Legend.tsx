@@ -27,6 +27,13 @@ export default function Legend() {
           <Typography variant="body2">{level.label}</Typography>
         </Box>
       ))}
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mt: 0.75, maxWidth: 170, lineHeight: 1.35 }}
+      >
+        Dots: weather when the truck gets there. Shading: weather at the time on the slider.
+      </Typography>
     </Paper>
   )
 }

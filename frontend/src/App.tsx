@@ -38,7 +38,7 @@ export default function App() {
   const [map, setMap] = useState<MapLibreMap | null>(null)
   const [anchor, setAnchor] = useState<Anchor>('departure')
   const [nowStart, setNowStart] = useState<string>()
-  const [heatLayer, setHeatLayer] = useState<HeatLayer>('risk')
+  const [heatLayer, setHeatLayer] = useState<HeatLayer>('risk_load')
 
   const data = plan.data
   // The driver's pick if it exists in these results, otherwise the recommended route.

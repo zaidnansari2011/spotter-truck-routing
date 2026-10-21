@@ -4,8 +4,9 @@ import type { CorridorFrames, HeatLayer } from '../api/types.ts'
 import { LEVELS } from './risk.ts'
 
 export const HEAT_LAYERS: { id: HeatLayer; label: string; unit: string }[] = [
-  { id: 'risk', label: 'Weather risk', unit: '' },
+  // Risk for this load is the default: it applies the load rules, as the checkpoint dots do.
   { id: 'risk_load', label: 'Risk for this load', unit: '' },
+  { id: 'risk', label: 'Weather only (no load rules)', unit: '' },
   { id: 'wind', label: 'Wind', unit: 'mph' },
   { id: 'rain', label: 'Rain', unit: 'in/hr' },
   { id: 'snow', label: 'Snow', unit: 'in/hr' },

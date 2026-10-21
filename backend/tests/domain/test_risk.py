@@ -48,7 +48,9 @@ def test_wind_bands(mph, expected):
         (0.10, MOD),
         (0.249, MOD),
         (0.25, HIGH),  # 0.25 appears in two bands; lower bound inclusive puts it in High
+        (0.499, HIGH),
         (0.50, SEVERE),
+        (0.999, SEVERE),
         (1.00, SEVERE),  # No Travel is "> 1.00", so 1.00 itself is Severe
         (1.001, NT),
     ],
@@ -63,8 +65,11 @@ def test_rain_bands(in_hr, expected):
         (0, LOW),
         (0.49, LOW),
         (0.5, MOD),
+        (0.99, MOD),
         (1.0, HIGH),
+        (1.99, HIGH),
         (2.0, SEVERE),
+        (2.99, SEVERE),
         (3.0, SEVERE),  # No Travel is "> 3.0"
         (3.01, NT),
     ],
@@ -108,6 +113,9 @@ def test_ties_list_every_factor_at_the_final_level():
         (35, 40_000, HIGH, False),  # strictly over 40,000 lb
         (35, 35_000, HIGH, False),  # the 30,000 lb rule only covers 45-54 mph
         (34.9, 50_000, MOD, False),  # below the 35 mph band, no rule applies
+        (55, 80_000, NT, False),  # already No Travel from wind alone, not from the load rule
+        (54, 30_001, NT, True),
+        (44, 40_001, SEVERE, True),
     ],
 )
 def test_load_rules(mph, load_lb, expected, rule_fired):
@@ -177,3 +185,11 @@ def test_combined_index_matches_assessed_level():
         expected = assess(wind, rain, snow, load)
         assert math.floor(risk_index(wind, rain, snow, load)) == expected.level
         assert math.floor(risk_index(wind, rain, snow)) == expected.weather_level
+
+
+def test_load_rules_never_lower_a_level():
+    # Snow is already No Travel; the 35-44 mph rule would say Severe, which must not win.
+    result = assess(wind_mph=40, rain_in_hr=0, snow_in_hr=3.5, load_lb=45_000)
+
+    assert result.level == NT
+    assert result.factors == ("snow",)
