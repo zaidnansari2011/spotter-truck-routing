@@ -66,6 +66,7 @@ The brief leaves a few things open. Each choice below is a named constant in the
 | Where the 0 to 48 hour slider starts | At departure (which is "now" by default), with a switch to start from now | For a trip leaving tomorrow, the weather it drives through is what matters ([DR-009](docs/decisions.md#dr-009-forecast-slider-start-time)) |
 | Load weight | Cargo weight, 0 to 80,000 lb | It is what the load rules describe |
 | Departure range | From 15 minutes ago to 7 days ahead | Forecast skill drops sharply after a week |
+| Does bad weather slow the truck? | No. Travel times are TomTom's (traffic and truck speeds), the same in any weather | The brief takes time from the routing API and risk from the weather; a speed penalty for snow or wind would be an invented rule. A risky route never wins on speed anyway, because risk is compared before time |
 
 ## Performance
 
