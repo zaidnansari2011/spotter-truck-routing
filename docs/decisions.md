@@ -31,6 +31,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-025](#dr-025-hours-of-service-rest-breaks) | Hours-of-service rest breaks | Accepted |
 | [DR-026](#dr-026-simulated-storm-demo-mode) | Simulated storm demo mode | Accepted |
 | [DR-027](#dr-027-shareable-trip-links) | Shareable trip links | Accepted |
+| [DR-028](#dr-028-layout-and-map-label-review) | Layout and map label review | Accepted |
 
 ---
 
@@ -593,3 +594,21 @@ The storm is applied after the real forecast is fetched and cached, so cached da
 **Precision.** Coordinates first used 5 decimals. Reopening a link then missed the server's route cache (the cache key uses the exact coordinates), TomTom recalculated with live traffic, and the result differed by 2 minutes from the original. Links now keep 6 decimals, the precision place search returns, and a reopened link reproduces the original plan exactly (checked in the browser).
 
 **Tests.** 9 unit tests (round trip including labels with commas, demo mode kept, past departures moved, five malformed links ignored, unknown spacing falling back to 25 miles) and a browser check (address updates on interval change, the clipboard holds the address, a fresh page opens on the same trip, form and spacing restored).
+
+---
+
+## DR-028: Layout and map label review
+
+**Why.** A screenshot review of the finished app, desktop and phone, found five things a reviewer would notice in the first minute. None broke a requirement; all made the main screen harder to read.
+
+| Found | Change | Result |
+|---|---|---|
+| After planning, the full form stayed on top and the recommendation started halfway down the panel | The form folds into a two-line trip summary with "Edit trip"; editing shows the form again with "Keep the current trip" | The guide sign is the second thing in the panel on desktop |
+| Route chips were pinned at fixed shares of each route (42%, 55%, 68%), so they stacked where routes shared a highway and covered arrival times | Each chip goes on the point of its route farthest from the other routes and chips (15% to 85% of the way, middle preferred among near-equal points). A transparent box of the chip's size is placed in the map's own label placement, so arrival times and place names under a chip give way | No chip overlaps another or a label in the Chicago to Denver and storm checks; 3 unit tests |
+| On phones the timeline covered about half the map, and the map collapsed to its 320 px minimum | The timeline is a strip under the map on phones; the map is 58% of the screen height and frames the routes without room for an overlay; chips show only the letter and worst risk | Map 390 x 490 px, all of the trip in view, no horizontal scroll |
+| Playback ran 6 forecast hours a second (48 h in 8 s), chosen for the heatmap before trucks were added; a truck crossed about 330 miles of map a second | Default 2 hours a second (48 h in 24 s), with a speed button for 1, 2 or 6 | In 2 s of play the recommended truck moves about 4 hours of driving, easy to follow |
+| In "Best time to leave", one click on a bar re-planned the trip without saying what the bar was | Pointing at or selecting a bar shows it ("Leave Wed 5:45 PM (in 5 h): Route A, worst weather Low"); a separate "Plan this departure" button re-plans. The description says what a bar is | No accidental re-plans; the readout is announced to screen readers |
+
+The rest-break note under the switch is now one line.
+
+**Checks.** Type check, lint, format and 61 unit tests pass. A browser tour (desktop 1440 x 900 and phone 390 x 844) covers the summary, route list, advisor hover and select, checkpoint popup, playback, layers, edit trip and storm mode, with no page or console errors.

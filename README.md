@@ -23,7 +23,7 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 | Risk from the wind, rain and snow table plus the load rules | Every checkpoint shows its level, the condition that set it, and any load rule that raised it |
 | Recommend the best route, balancing risk and travel time | The guide sign at the top, the "Why Route A" panel, and a note when a riskier route is much faster |
 | All routes, checkpoints, risk levels, ETAs and summaries on a map | Route lines (the selected one colored by risk), checkpoint dots with arrival times, popups, and a summary chip per route |
-| Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button, and layers for risk, risk with load, wind, rain and snow |
+| Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button with 1, 2 or 6 forecast hours a second, and layers for risk, risk with load, wind, rain and snow |
 | Extra: best time to leave | Re-scores the routes for departures up to 24 hours later and suggests the safest one ([DR-022](docs/decisions.md#dr-022-departure-time-advisor)) |
 | Extra: trucks on the timeline | A marker per route moves with the forecast slider, so you can watch each truck meet the weather ([DR-024](docs/decisions.md#dr-024-trucks-on-the-timeline)) |
 | Extra: required rest breaks | Optional hours-of-service breaks added to arrival times, which changes the forecast at each checkpoint ([DR-025](docs/decisions.md#dr-025-hours-of-service-rest-breaks)) |
