@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Checkpoint, Plan, RouteOption } from '../api/types.ts'
 import {
+  chipAnchors,
   cumulativeMi,
   haversineMi,
   planBounds,
@@ -145,5 +146,47 @@ describe('routeLines and bounds', () => {
       [0, -1],
       [3, 2],
     ])
+  })
+})
+
+describe('chipAnchors', () => {
+  // A and B share their first half, then B turns north; C runs parallel, 2 degrees south.
+  const shared: [number, number][] = [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+  ]
+  const plan = {
+    routes: [
+      { ...route([]), id: 'A', geometry: [...shared, [3, 0], [4, 0]] },
+      { ...route([]), id: 'B', geometry: [...shared, [2, 1], [2, 2]] },
+      {
+        ...route([]),
+        id: 'C',
+        geometry: [
+          [0, -2],
+          [2, -2],
+          [4, -2],
+        ],
+      },
+    ],
+  } as Plan
+
+  it('pins chips where routes split, not on the highway they share', () => {
+    const anchors = chipAnchors(plan)
+    expect(anchors.A[0]).toBeGreaterThan(2) // on A's own stretch, east of the split
+    expect(anchors.B[1]).toBeGreaterThan(0) // on B's own stretch, north of the split
+  })
+
+  it('prefers the middle of a route that is clear all along', () => {
+    expect(chipAnchors(plan).C[0]).toBeCloseTo(2, 0)
+  })
+
+  it('keeps chips apart from each other', () => {
+    const anchors = chipAnchors(plan)
+    const ids = Object.keys(anchors)
+    for (const a of ids)
+      for (const b of ids)
+        if (a < b) expect(haversineMi(anchors[a], anchors[b])).toBeGreaterThan(50)
   })
 })

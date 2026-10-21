@@ -79,6 +79,39 @@ export function riskSegments(route: RouteOption): FeatureCollection<LineString> 
   return { type: 'FeatureCollection', features }
 }
 
+const CHIP_FRACTIONS = Array.from({ length: 29 }, (_, i) => 0.15 + i * 0.025) // 15% to 85%
+const MAX_COMPARED_POINTS = 400
+
+/**
+ * Where to pin each route's summary chip: the point along the route farthest from the other
+ * routes and from chips already placed, so chips never stack where routes share a highway.
+ */
+export function chipAnchors(plan: Plan): Record<string, LonLat> {
+  const anchors: Record<string, LonLat> = {}
+  for (const route of plan.routes) {
+    const others = plan.routes
+      .filter((r) => r.id !== route.id)
+      .flatMap((r) => thin(r.geometry, MAX_COMPARED_POINTS))
+      .concat(Object.values(anchors))
+    const candidates = CHIP_FRACTIONS.map((fraction) => {
+      const point = pointAlong(route.geometry, fraction)
+      const gap = others.length ? Math.min(...others.map((o) => haversineMi(point, o))) : 0
+      return { point, gap, fromMiddle: Math.abs(fraction - 0.5) }
+    })
+    // Prefer clear space; among points nearly as clear as the clearest, prefer the middle.
+    const widest = Math.max(...candidates.map((c) => c.gap))
+    const clear = candidates.filter((c) => c.gap >= widest * 0.8)
+    anchors[route.id] = clear.reduce((a, b) => (b.fromMiddle < a.fromMiddle ? b : a)).point
+  }
+  return anchors
+}
+
+function thin(coords: LonLat[], limit: number): LonLat[] {
+  if (coords.length <= limit) return coords
+  const step = coords.length / limit
+  return Array.from({ length: limit }, (_, i) => coords[Math.floor(i * step)])
+}
+
 export function routeLines(plan: Plan, selectedId: string): FeatureCollection<LineString> {
   return {
     type: 'FeatureCollection',

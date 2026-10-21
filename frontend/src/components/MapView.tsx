@@ -16,8 +16,8 @@ import type { Plan } from '../api/types.ts'
 import { formatDuration, formatMiles } from '../lib/format.ts'
 import {
   checkpointPoints,
+  chipAnchors,
   planBounds,
-  pointAlong,
   riskSegments,
   routeLines,
 } from '../lib/mapData.ts'
@@ -31,8 +31,6 @@ setWorkerUrl(workerUrl)
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
 const US_VIEW = { center: [-96, 38.5] as [number, number], zoom: 3.6 }
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
-// Chips sit at different points along each route so they do not stack where routes overlap.
-const CHIP_POSITION: Record<string, number> = { A: 0.42, B: 0.55, C: 0.68 }
 
 interface Props {
   plan?: Plan
@@ -85,6 +83,8 @@ export default function MapView({
       bindInteractions(instance, latest)
       setMap(instance)
       readyCallback.current?.(instance)
+      // Development only: lets browser checks find features on the map. Removed from builds.
+      if (import.meta.env.DEV) Object.assign(window, { __map: instance })
     })
     return () => instance.remove()
   }, [])
@@ -98,14 +98,15 @@ export default function MapView({
     source(map, 'checkpoints').setData(selected ? checkpointPoints(selected) : EMPTY)
   }, [map, plan, selectedId])
 
-  // Frame all routes when a new plan arrives.
+  // Frame all routes when a new plan arrives. On phones the timeline sits under the map,
+  // so the map needs no room for it.
   useEffect(() => {
     if (!map || !plan) return
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const compact = map.getContainer().clientWidth < 600
     map.fitBounds(planBounds(plan), {
       padding: compact
-        ? { top: 40, bottom: 110, left: 24, right: 24 }
+        ? { top: 40, bottom: 40, left: 24, right: 24 }
         : { top: 70, bottom: 150, left: 60, right: 60 },
       duration: reduceMotion ? 0 : 900,
     })
@@ -114,6 +115,7 @@ export default function MapView({
   // Route chips: route letter and travel time, clickable.
   useEffect(() => {
     if (!map || !plan) return
+    const anchors = chipAnchors(plan)
     const markers = plan.routes.map((route) => {
       const chip = document.createElement('button')
       chip.type = 'button'
@@ -126,16 +128,18 @@ export default function MapView({
       chip.title = `Worst weather on this route: ${worst.label}`
       chip.innerHTML =
         `<span class="route-chip-id">${route.id}</span>` +
-        `<span class="route-chip-risk" style="background:${worst.color}"></span>${summary}`
+        `<span class="route-chip-risk" style="background:${worst.color}"></span><span class="route-chip-text">${summary}</span>`
       chip.addEventListener('click', (event) => {
         event.stopPropagation()
         latest.current.onSelectRoute(route.id)
       })
-      return new Marker({ element: chip })
-        .setLngLat(pointAlong(route.geometry, CHIP_POSITION[route.id] ?? 0.5))
-        .addTo(map)
+      return new Marker({ element: chip }).setLngLat(anchors[route.id]).addTo(map)
     })
-    return () => markers.forEach((m) => m.remove())
+    blockChipSpace(map, markers)
+    return () => {
+      markers.forEach((m) => m.remove())
+      source(map, 'chip-blockers').setData(EMPTY)
+    }
   }, [map, plan, selectedId, recommendedId])
 
   return (
@@ -150,8 +154,26 @@ function source(map: MapLibreMap, id: string): GeoJSONSource {
   return map.getSource(id) as GeoJSONSource
 }
 
+/** Reserves each chip's on-screen box in the map's label placement with a transparent icon. */
+function blockChipSpace(map: MapLibreMap, markers: Marker[]) {
+  const features = markers.map((marker, i) => {
+    const chip = marker.getElement()
+    const image = `chip-block-${i}`
+    const width = Math.ceil(chip.offsetWidth)
+    const height = Math.ceil(chip.offsetHeight)
+    if (map.hasImage(image)) map.removeImage(image)
+    map.addImage(image, { width, height, data: new Uint8Array(width * height * 4) })
+    const { lng, lat } = marker.getLngLat()
+    return {
+      type: 'Feature' as const,
+      properties: { image },
+      geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+    }
+  })
+  source(map, 'chip-blockers').setData({ type: 'FeatureCollection', features })
+}
 function addRouteLayers(map: MapLibreMap) {
-  for (const id of ['heat', 'routes', 'risk', 'checkpoints', 'trucks']) {
+  for (const id of ['heat', 'routes', 'risk', 'checkpoints', 'chip-blockers', 'trucks']) {
     map.addSource(id, { type: 'geojson', data: EMPTY })
   }
 
@@ -225,6 +247,20 @@ function addRouteLayers(map: MapLibreMap) {
       'text-color': tokens.asphalt,
       'text-halo-color': tokens.laneWhite,
       'text-halo-width': 1.5,
+    },
+  })
+
+  // Invisible boxes where the route chips sit. Symbols are placed top layer first, so arrival
+  // times and place names below give way to the chips instead of hiding under them.
+  map.addLayer({
+    id: 'chip-blockers',
+    type: 'symbol',
+    source: 'chip-blockers',
+    layout: {
+      'icon-image': ['get', 'image'],
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': false,
+      'icon-padding': 4,
     },
   })
 
@@ -302,6 +338,11 @@ const mapStyles = {
     font: `700 12px/1 ${fontFamily}`,
     boxShadow: '0 1px 4px rgba(43, 47, 51, 0.35)',
     cursor: 'pointer',
+  },
+  // On phones the routes sit close together; chips show only the letter and worst risk there.
+  '@media (max-width: 599px)': {
+    '& .route-chip': { padding: '3px' },
+    '& .route-chip-text': { display: 'none' },
   },
   '& .route-chip[data-recommended="true"]': { background: tokens.signGreen },
   '& .route-chip[data-selected="true"]': { outline: `3px solid ${tokens.centerLine}` },
