@@ -94,6 +94,19 @@ Django + Django REST Framework (stateless, no database)
 
 One Docker image serves both the API and the built frontend. OpenAPI docs are at `/api/docs/`.
 
+**Why there is no database.** Nothing the app shows belongs to a user or needs to outlive a forecast: routes and weather come from the APIs and go stale within hours. Storing them would add migrations and indexes with nothing to query. What should be reused is cached instead (Redis when `REDIS_URL` is set, otherwise in memory): routes for 10 minutes, forecasts per 0.05° cell for 30 minutes, place search for 24 hours. Upstream calls are batched rather than made one per point: checkpoints and grid points that share a cell are fetched once, in requests of up to 300 locations. See [DR-012](docs/decisions.md#dr-012-stateless-backend-no-database).
+
+**Errors.** Every error is JSON `{"code", "message"}` (plus `fields` for invalid input), and the page shows the message:
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `invalid_input` | A field is missing or out of range (past departure, load over 80,000 lb, ...) |
+| 422 | `no_route` | TomTom finds no truck route between the two places (for example across an ocean) |
+| 429 | `rate_limited` | Too many requests from one address |
+| 502 | `routing_unavailable`, `weather_unavailable` | TomTom or Open-Meteo failed |
+| 503 | `weather_busy` | Open-Meteo's free quota is used up for the moment; try again shortly |
+| 500 | `internal_error` | Anything unexpected (logged) |
+
 ## Tests and quality
 
 - **Backend:** 217 pytest tests, 100% branch coverage. The risk table edges, load rules, ranking order, arrival-time interpolation and forecast-hour matching all have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
