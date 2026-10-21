@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
-import type { DepartureAdvice } from '../api/types.ts'
+import type { DepartureAdvice, DepartureOption } from '../api/types.ts'
 import { advisorGain } from '../lib/explain.ts'
 import { formatClock, formatMiles, timeZoneName } from '../lib/format.ts'
 import { levelStyle } from '../lib/risk.ts'
@@ -20,6 +21,11 @@ const TICKS = [0, 6, 12, 18, 24]
 export default function DepartureWindow({ advice, busy, onReplan }: Props) {
   const planned = advice.options[0]
   const suggestion = advice.suggestion
+  // Hovering previews an hour; clicking picks it. Planning it is a separate, explicit step.
+  const [picked, setPicked] = useState<number>()
+  const [hovered, setHovered] = useState<number>()
+  const shownOffset = hovered ?? picked
+  const shown = advice.options.find((o) => o.offset_h === shownOffset)
 
   return (
     <Box component="section" aria-labelledby="departure-heading">
@@ -27,8 +33,8 @@ export default function DepartureWindow({ advice, busy, onReplan }: Props) {
         Best time to leave
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Worst weather on the best route if you leave later, using the same routes and driving times.
-        Select an hour to plan that departure.
+        Each bar is a departure time, from your planned one to 24 hours later, colored by the worst
+        weather the best route would meet if you left then. Select a bar to see it.
       </Typography>
 
       {suggestion ? (
@@ -57,26 +63,35 @@ export default function DepartureWindow({ advice, busy, onReplan }: Props) {
         </Typography>
       )}
 
-      <Box role="group" aria-label="Departure hours" sx={{ display: 'flex', gap: '2px' }}>
+      <Box
+        role="group"
+        aria-label="Departure hours"
+        onMouseLeave={() => setHovered(undefined)}
+        sx={{ display: 'flex', gap: '2px' }}
+      >
         {advice.options.map((option) => {
           const style = levelStyle(option.worst_level)
           const isSuggestion = suggestion?.offset_h === option.offset_h
-          const label =
-            `Leave ${formatClock(option.departure)}: Route ${option.route_id}, worst ${style.label}` +
-            (option.severe_miles ? `, ${formatMiles(option.severe_miles)} Severe` : '')
+          const label = optionText(option)
           return (
             <ButtonBase
               key={option.offset_h}
-              title={label}
               aria-label={label}
-              disabled={busy || option.offset_h === 0}
-              onClick={() => onReplan(option.departure)}
+              aria-pressed={picked === option.offset_h}
+              disabled={busy}
+              onClick={() => setPicked(option.offset_h)}
+              onMouseEnter={() => setHovered(option.offset_h)}
+              onFocus={() => setHovered(option.offset_h)}
+              onBlur={() => setHovered(undefined)}
               sx={{
                 flex: 1,
                 height: 22,
                 borderRadius: '3px',
                 bgcolor: style.color,
-                outline: option.offset_h === 0 ? `2px solid ${tokens.asphalt}` : 'none',
+                outline:
+                  option.offset_h === 0 || option.offset_h === picked
+                    ? `2px solid ${tokens.asphalt}`
+                    : 'none',
                 outlineOffset: 1,
                 boxShadow: isSuggestion ? `0 0 0 3px ${tokens.centerLine}` : 'none',
                 '&:hover': { filter: 'brightness(1.1)' },
@@ -104,6 +119,49 @@ export default function DepartureWindow({ advice, busy, onReplan }: Props) {
           </Typography>
         ))}
       </Box>
+
+      <Box aria-live="polite" sx={{ mt: 1, minHeight: 56 }}>
+        {shown ? (
+          <>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {optionText(shown)}
+            </Typography>
+            {shown.offset_h === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                This is the departure you planned.
+              </Typography>
+            ) : picked === shown.offset_h ? (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={busy}
+                onClick={() => onReplan(shown.departure)}
+                sx={{ mt: 0.75 }}
+              >
+                Plan this departure ({formatClock(shown.departure)})
+              </Button>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Select the bar to plan this departure.
+              </Typography>
+            )}
+          </>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            Nothing selected. Point at or select a bar to see that departure.
+          </Typography>
+        )}
+      </Box>
     </Box>
+  )
+}
+
+function optionText(option: DepartureOption): string {
+  const style = levelStyle(option.worst_level)
+  const when = option.offset_h === 0 ? 'planned' : `in ${option.offset_h} h`
+  const severe = option.severe_miles ? `, ${formatMiles(option.severe_miles)} Severe` : ''
+  return (
+    `Leave ${formatClock(option.departure)} (${when}): Route ${option.route_id}, ` +
+    `worst weather ${style.label}${severe}`
   )
 }
