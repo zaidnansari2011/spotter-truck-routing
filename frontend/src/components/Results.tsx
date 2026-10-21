@@ -3,6 +3,7 @@ import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Snackbar from '@mui/material/Snackbar'
 import LinkRounded from '@mui/icons-material/LinkRounded'
+import ThunderstormRounded from '@mui/icons-material/ThunderstormRounded'
 import Skeleton from '@mui/material/Skeleton'
 import Stack from '@mui/material/Stack'
 import ToggleButton from '@mui/material/ToggleButton'
@@ -25,6 +26,7 @@ interface Props {
   busy: boolean
   updating: boolean // a different interval is loading; the shown results are the previous ones
   onReplan: (departure: string) => void
+  demoStorm: boolean // the simulated storm is on, so it is not offered again
 }
 
 export default function Results({
@@ -37,6 +39,7 @@ export default function Results({
   busy,
   updating,
   onReplan,
+  demoStorm,
 }: Props) {
   const ranking = plan.ranking
   const recommended = plan.routes.find((r) => r.id === ranking.recommended_id)!
@@ -48,6 +51,10 @@ export default function Results({
     setCopied(true)
   }
 
+  // The same trip with the simulated storm on; the shared link plans it straight away.
+  const stormParams = new URLSearchParams(window.location.search)
+  stormParams.set('demo', 'storm')
+
   return (
     <Stack
       spacing={3}
@@ -55,14 +62,20 @@ export default function Results({
       sx={{ mt: 3, opacity: updating ? 0.55 : 1, transition: 'opacity 150ms' }}
     >
       <RecommendationSign route={recommended} ranking={ranking} destination={destination} />
-      <Button
-        size="small"
-        startIcon={<LinkRounded />}
-        onClick={copyLink}
-        sx={{ alignSelf: 'flex-start', mt: '8px !important' }}
-      >
-        Copy link to this trip
-      </Button>
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1, mt: '8px !important' }}>
+        <Button size="small" startIcon={<LinkRounded />} onClick={copyLink}>
+          Copy link to this trip
+        </Button>
+        {!demoStorm && (
+          <Button
+            size="small"
+            startIcon={<ThunderstormRounded />}
+            href={`?${stormParams.toString()}`}
+          >
+            Try it in a simulated storm
+          </Button>
+        )}
+      </Stack>
       <Snackbar
         open={copied}
         autoHideDuration={2500}

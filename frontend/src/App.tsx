@@ -156,6 +156,7 @@ export default function App() {
             busy={plan.isFetching}
             updating={updating}
             onReplan={replanAt}
+            demoStorm={DEMO_STORM}
           />
         )}
       </Box>
