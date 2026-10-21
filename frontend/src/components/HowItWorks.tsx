@@ -48,6 +48,12 @@ export default function HowItWorks() {
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" scroll="paper">
         <DialogTitle>How routes are compared</DialogTitle>
         <DialogContent dividers>
+          <Section title="See it in bad weather">
+            Real weather is often calm, so every route shows Low. The{' '}
+            <Link href="/?demo=storm">simulated storm demo</Link> lays a made-up storm over the real
+            forecast, clearly labelled, to show the risk and load rules at work. Try loads of
+            20,000, 35,000 and 45,000 lb on the same trip.
+          </Section>
           <Section title="1. Three truck routes">
             TomTom truck routing with your load plus an assumed 35,000 lb tractor-trailer (capped at
             80,000 lb). If TomTom returns fewer than 3 distinct routes, the others are found through

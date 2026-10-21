@@ -32,7 +32,7 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 | Extra: trucks on the timeline | A marker per route moves with the forecast slider, so you can watch each truck meet the weather ([DR-024](docs/decisions.md#dr-024-trucks-on-the-timeline)) |
 | Extra: required rest breaks | Optional hours-of-service breaks added to arrival times, which changes the forecast at each checkpoint ([DR-025](docs/decisions.md#dr-025-hours-of-service-rest-breaks)) |
 | Extra: shareable links | The address holds the trip, and "Copy link to this trip" shares it; opening a link plans the same trip ([DR-027](docs/decisions.md#dr-027-shareable-trip-links)) |
-| Demo: simulated storm | Open the app with `?demo=storm` to lay a clearly labelled synthetic storm over the real forecast, for when the weather is calm ([DR-026](docs/decisions.md#dr-026-simulated-storm-demo-mode)) |
+| Demo: simulated storm | Follow "try it with a simulated storm" on the start screen (or open `?demo=storm`) to lay a clearly labelled synthetic storm over the real forecast, for when the weather is calm ([DR-026](docs/decisions.md#dr-026-simulated-storm-demo-mode)) |
 
 ## How the recommendation is made
 

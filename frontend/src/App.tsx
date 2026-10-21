@@ -133,6 +133,7 @@ export default function App() {
             busy={plan.isFetching}
             onSubmit={findRoutes}
             onCancel={data && editing ? () => setEditing(false) : undefined}
+            demoStorm={DEMO_STORM}
           />
         ) : (
           <TripSummary request={request} onEdit={() => setEditing(true)} />

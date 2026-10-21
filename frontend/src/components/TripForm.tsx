@@ -27,9 +27,10 @@ interface Props {
   onSubmit: (request: PlanRequest) => void
   initial?: PlanRequest // fills the form when a plan is re-run from the results
   onCancel?: () => void // shown when editing a trip that already has results
+  demoStorm?: boolean // the simulated storm is on, so the start hint does not offer it again
 }
 
-export default function TripForm({ busy, onSubmit, initial, onCancel }: Props) {
+export default function TripForm({ busy, onSubmit, initial, onCancel, demoStorm }: Props) {
   const [origin, setOrigin] = useState<Place | null>(initial?.origin ?? null)
   const [destination, setDestination] = useState<Place | null>(initial?.destination ?? null)
   const [departure, setDeparture] = useState<Dayjs | null>(() =>
@@ -149,6 +150,11 @@ export default function TripForm({ busy, onSubmit, initial, onCancel }: Props) {
             >
               Fill in Chicago to Denver
             </Link>
+            {!demoStorm && (
+              <>
+                , or try it with a <Link href="/?demo=storm">simulated storm</Link>
+              </>
+            )}
           </Typography>
         )}
       </Stack>
