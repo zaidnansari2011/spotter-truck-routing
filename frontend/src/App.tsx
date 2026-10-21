@@ -12,6 +12,7 @@ import MapView from './components/MapView.tsx'
 import Results, { ResultsSkeleton } from './components/Results.tsx'
 import TimelineBar, { type Anchor } from './components/TimelineBar.tsx'
 import TripForm from './components/TripForm.tsx'
+import TripSummary from './components/TripSummary.tsx'
 import { useHeatLayer } from './components/useHeatLayer.ts'
 import { useTruckLayer } from './components/useTruckLayer.ts'
 import { corridorFeatures } from './lib/heatmap.ts'
@@ -32,6 +33,7 @@ export default function App() {
   const plan = usePlan(request, interval)
   const [chosenId, setChosenId] = useState<string>()
   const [formVersion, setFormVersion] = useState(0)
+  const [editing, setEditing] = useState(false)
   const [map, setMap] = useState<MapLibreMap | null>(null)
   const [anchor, setAnchor] = useState<Anchor>('departure')
   const [nowStart, setNowStart] = useState<string>()
@@ -43,6 +45,8 @@ export default function App() {
     ? chosenId
     : data?.ranking.recommended_id
   const updating = plan.isFetching && plan.isPlaceholderData
+  // Once there are results the form folds into a summary, so the results start at the top.
+  const showForm = !data || !request || editing || plan.isError
 
   const timelineStart = anchor === 'departure' ? data?.departure : nowStart
   const corridor = useCorridor(data, timelineStart)
@@ -73,6 +77,7 @@ export default function App() {
   function findRoutes(next: PlanRequest) {
     setRequest(DEMO_STORM ? { ...next, demo: 'storm' } : next)
     setChosenId(undefined) // a new trip starts on its recommended route
+    setEditing(false)
   }
 
   function replanAt(departure: string) {
@@ -118,12 +123,17 @@ export default function App() {
 
         {DEMO_STORM && <DemoBanner />}
 
-        <TripForm
-          key={formVersion}
-          initial={request}
-          busy={plan.isFetching}
-          onSubmit={findRoutes}
-        />
+        {showForm ? (
+          <TripForm
+            key={formVersion}
+            initial={request}
+            busy={plan.isFetching}
+            onSubmit={findRoutes}
+            onCancel={data && editing ? () => setEditing(false) : undefined}
+          />
+        ) : (
+          <TripSummary request={request} onEdit={() => setEditing(true)} />
+        )}
 
         {plan.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -152,49 +162,59 @@ export default function App() {
           order: { xs: 1, md: 2 },
           flex: 1,
           position: 'relative',
-          height: { xs: '62vh', md: 'auto' },
-          minHeight: 360,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <MapView
-          plan={data}
-          selectedId={selectedId}
-          recommendedId={data?.ranking.recommended_id}
-          onSelectRoute={setChosenId}
-          onMapReady={setMap}
+        {/* On phones the timeline sits under the map instead of covering half of it. */}
+        <Box
+          sx={{
+            position: 'relative',
+            flex: { xs: 'none', md: 1 },
+            height: { xs: '58vh', md: 'auto' },
+            minHeight: 320,
+          }}
         >
-          {plan.isFetching && (
-            <LinearProgress
-              aria-label="Finding routes"
-              sx={{ position: 'absolute', top: 0, left: 0, right: 0 }}
-            />
-          )}
-          <Legend />
-          {DEMO_STORM && (
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 12,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                maxWidth: 420,
-              }}
-            >
-              <DemoBanner compact />
-            </Box>
-          )}
-          <TimelineBar
-            hours={corridor.data?.hours}
-            startTs={timelineStart ? Date.parse(timelineStart) / 1000 : undefined}
-            loading={corridor.isFetching}
-            error={corridor.isError ? corridor.error.message : undefined}
-            anchor={anchor}
-            onAnchorChange={changeAnchor}
-            layer={heatLayer}
-            onLayerChange={setHeatLayer}
-            onTimeChange={setTimelineTime}
-          />
-        </MapView>
+          <MapView
+            plan={data}
+            selectedId={selectedId}
+            recommendedId={data?.ranking.recommended_id}
+            onSelectRoute={setChosenId}
+            onMapReady={setMap}
+          >
+            {plan.isFetching && (
+              <LinearProgress
+                aria-label="Finding routes"
+                sx={{ position: 'absolute', top: 0, left: 0, right: 0 }}
+              />
+            )}
+            <Legend />
+            {DEMO_STORM && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 12,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  maxWidth: 420,
+                }}
+              >
+                <DemoBanner compact />
+              </Box>
+            )}
+          </MapView>
+        </Box>
+        <TimelineBar
+          hours={corridor.data?.hours}
+          startTs={timelineStart ? Date.parse(timelineStart) / 1000 : undefined}
+          loading={corridor.isFetching}
+          error={corridor.isError ? corridor.error.message : undefined}
+          anchor={anchor}
+          onAnchorChange={changeAnchor}
+          layer={heatLayer}
+          onLayerChange={setHeatLayer}
+          onTimeChange={setTimelineTime}
+        />
       </Box>
     </Box>
   )

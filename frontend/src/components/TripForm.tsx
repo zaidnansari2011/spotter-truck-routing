@@ -26,9 +26,10 @@ interface Props {
   busy: boolean
   onSubmit: (request: PlanRequest) => void
   initial?: PlanRequest // fills the form when a plan is re-run from the results
+  onCancel?: () => void // shown when editing a trip that already has results
 }
 
-export default function TripForm({ busy, onSubmit, initial }: Props) {
+export default function TripForm({ busy, onSubmit, initial, onCancel }: Props) {
   const [origin, setOrigin] = useState<Place | null>(initial?.origin ?? null)
   const [destination, setDestination] = useState<Place | null>(initial?.destination ?? null)
   const [departure, setDeparture] = useState<Dayjs | null>(() =>
@@ -120,8 +121,7 @@ export default function TripForm({ busy, onSubmit, initial }: Props) {
             label="Add required rest breaks"
           />
           <Typography variant="body2" color="text.secondary" sx={{ mt: -0.5 }}>
-            Hours of service: a 30 minute break after 8 hours of driving and 10 hours off after 11.
-            Rests move arrival times, so the weather at each checkpoint changes too.
+            30 min break after 8 h of driving, 10 h off after 11 h.
           </Typography>
         </Box>
         <Button
@@ -133,6 +133,11 @@ export default function TripForm({ busy, onSubmit, initial }: Props) {
         >
           {busy ? 'Checking routes and forecasts' : 'Find routes'}
         </Button>
+        {onCancel && (
+          <Button onClick={onCancel} sx={{ mt: '8px !important' }}>
+            Keep the current trip
+          </Button>
+        )}
         {!origin && !destination && (
           <Typography variant="body2" color="text.secondary">
             New here?{' '}

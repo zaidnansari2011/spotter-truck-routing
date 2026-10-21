@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
@@ -19,7 +20,9 @@ import { tokens } from '../theme.ts'
 export type Anchor = 'departure' | 'now'
 
 const LAST_HOUR = FRAME_COUNT - 1
-const PLAY_HOURS_PER_SECOND = 6
+// Forecast hours played per second. 2 plays the 48 hours in 24 s, slow enough to follow the trucks.
+const SPEEDS = [1, 2, 6]
+const DEFAULT_SPEED = 2
 const MARKS = [0, 12, 24, 36, 48].map((value) => ({ value, label: `${value} h` }))
 
 interface Props {
@@ -55,6 +58,7 @@ export default function TimelineBar({
 }: Props) {
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(DEFAULT_SPEED)
   const frame = useRef<number | undefined>(undefined)
 
   // Frames start on the hour; the slider starts at the exact departure, so offset into the frames.
@@ -74,7 +78,7 @@ export default function TimelineBar({
       const elapsed = (now - last) / 1000
       last = now
       setTime((t) => {
-        const next = t + elapsed * PLAY_HOURS_PER_SECOND
+        const next = t + elapsed * speed
         if (next >= LAST_HOUR) {
           setPlaying(false)
           return LAST_HOUR
@@ -85,11 +89,15 @@ export default function TimelineBar({
     }
     frame.current = requestAnimationFrame(step)
     return () => cancelAnimationFrame(frame.current!)
-  }, [playing])
+  }, [playing, speed])
 
   function togglePlay() {
     if (!playing && time >= LAST_HOUR) setTime(0)
     setPlaying(!playing)
+  }
+
+  function nextSpeed() {
+    setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])
   }
 
   const ready = Boolean(hours && startTs) && !loading
@@ -107,11 +115,13 @@ export default function TimelineBar({
       component="section"
       aria-label="Weather forecast timeline"
       sx={{
-        position: 'absolute',
-        left: { xs: 8, sm: 16 },
-        right: { xs: 8, sm: 16 },
-        bottom: { xs: 8, sm: 24 },
-        maxWidth: 760,
+        // Floats over the map on wide screens; on phones it is a strip under the map.
+        position: { xs: 'static', md: 'absolute' },
+        left: 16,
+        right: 16,
+        bottom: 24,
+        maxWidth: { md: 760 },
+        borderRadius: { xs: 0, md: 1 },
         mx: 'auto',
         px: { xs: 1.5, sm: 2 },
         pt: 1,
@@ -154,6 +164,16 @@ export default function TimelineBar({
             }}
           />
         </Box>
+        <Button
+          size="small"
+          onClick={nextSpeed}
+          disabled={!ready}
+          aria-label={`Playback speed: ${speed} forecast hours per second. Change speed`}
+          title="Playback speed"
+          sx={{ minWidth: 0, px: 1, color: 'text.primary', whiteSpace: 'nowrap' }}
+        >
+          {speed} h/s
+        </Button>
       </Box>
 
       <Box
