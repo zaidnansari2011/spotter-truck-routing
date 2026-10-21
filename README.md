@@ -2,7 +2,7 @@
 
 Plan a truck trip and see which of three routes is safest to drive. The app checks the forecast at the moment the truck reaches each point on each route, applies the load-weight rules, and recommends a route by weather risk and travel time.
 
-**Live app:** _link added at deployment_ &nbsp;|&nbsp; **Walkthrough video:** _link added after recording_
+**Live app:** [truck-routing.zaidansari.tech](https://truck-routing.zaidansari.tech) &nbsp;|&nbsp; **Walkthrough video:** _link added after recording_
 
 ![Chicago to Denver: three truck routes, the recommended route as a guide sign, checkpoints with arrival times, and the forecast timeline](docs/images/app-desktop.png)
 
@@ -23,7 +23,7 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
 | Risk from the wind, rain and snow table plus the load rules | Every checkpoint shows its level, the condition that set it, and any load rule that raised it |
 | Recommend the best route, balancing risk and travel time | The guide sign at the top, the "Why Route A" panel, and a note when a riskier route is much faster |
 | All routes, checkpoints, risk levels, ETAs and summaries on a map | Route lines (the selected one colored by risk), checkpoint dots with arrival times, popups, and a summary chip per route |
-| Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button with 1, 2 or 6 forecast hours a second, and layers for risk, risk with load, wind, rain and snow |
+| Weather heatmap along the trip corridor with a 0 to 48 hour slider | Forecast grid around all three routes, a slider in 15 minute steps, play button with 1, 2 or 6 forecast hours a second, and layers for risk for this load (the default, so the shading agrees with the checkpoint dots), weather only, wind, rain and snow |
 | Extra: best time to leave | Re-scores the routes for departures up to 24 hours later and suggests the safest one ([DR-022](docs/decisions.md#dr-022-departure-time-advisor)) |
 | Extra: trucks on the timeline | A marker per route moves with the forecast slider, so you can watch each truck meet the weather ([DR-024](docs/decisions.md#dr-024-trucks-on-the-timeline)) |
 | Extra: required rest breaks | Optional hours-of-service breaks added to arrival times, which changes the forecast at each checkpoint ([DR-025](docs/decisions.md#dr-025-hours-of-service-rest-breaks)) |
@@ -79,6 +79,15 @@ Measured on the production build ([DR-018](docs/decisions.md#dr-018-plan-api-des
 
 Forecasts are cached per 5 km grid cell for 30 minutes, so toggling the timeline start or planning a similar trip reuses them ([DR-017](docs/decisions.md#dr-017-forecast-batching-and-caching)).
 
+Measured on the hosted app (Azure Container Apps, 0.5 vCPU, one replica) from India on 2026-10-21 ([DR-029](docs/decisions.md#dr-029-review-against-a-scoring-checklist)):
+
+| | |
+|---|---|
+| New trip, nothing cached (Dallas to Atlanta) | 5.2 s |
+| Same trip again | 0.6 s |
+| Heatmap frames, 253 points x 49 hours | 1.1 s |
+| Three different trips sent at the same moment | each 3.9 to 5.0 s, all three done in 5.0 s, no errors |
+
 ## Architecture
 
 ```
@@ -95,6 +104,8 @@ Django + Django REST Framework (stateless, no database)
 One Docker image serves both the API and the built frontend. OpenAPI docs are at `/api/docs/`.
 
 **Why there is no database.** Nothing the app shows belongs to a user or needs to outlive a forecast: routes and weather come from the APIs and go stale within hours. Storing them would add migrations and indexes with nothing to query. What should be reused is cached instead (Redis when `REDIS_URL` is set, otherwise in memory): routes for 10 minutes, forecasts per 0.05° cell for 30 minutes, place search for 24 hours. Upstream calls are batched rather than made one per point: checkpoints and grid points that share a cell are fetched once, in requests of up to 300 locations. See [DR-012](docs/decisions.md#dr-012-stateless-backend-no-database).
+
+Caching is not a database replacement in general; it fits here because there are no records to keep. Saved trips or user accounts would change that: a Postgres database with a `Trip` table (owner, origin, destination, departure, load, spacing), an index on owner and creation time, and auth on the API. Forecasts would still not be stored, since a saved trip would be re-planned when opened.
 
 **Errors.** Every error is JSON `{"code", "message"}` (plus `fields` for invalid input), and the page shows the message:
 

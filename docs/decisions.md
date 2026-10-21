@@ -32,6 +32,7 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-026](#dr-026-simulated-storm-demo-mode) | Simulated storm demo mode | Accepted |
 | [DR-027](#dr-027-shareable-trip-links) | Shareable trip links | Accepted |
 | [DR-028](#dr-028-layout-and-map-label-review) | Layout and map label review | Accepted |
+| [DR-029](#dr-029-review-against-a-scoring-checklist) | Review against a scoring checklist | Accepted |
 
 ---
 
@@ -614,3 +615,18 @@ The rest-break note under the switch is now one line.
 **Follow-up: trip end on the timeline.** The slider covers the 48 hour forecast, but trips end sooner (14 to 20 hours for Chicago to Denver). Past the last arrival the trucks sat stacked on the destination while the slider kept moving, which read as the two being out of step. Now each route's arrival is a lettered flag above the track (arrivals under 1.5 h apart share one flag), the status line says which trucks have arrived ("All trucks have arrived; the map shows only the forecast"), and an arrived truck leaves the map. 6 unit tests; checked in the browser at 16 h (A arrived, B and C driving) and 48 h.
 
 **Checks.** Type check, lint, format and 61 unit tests pass. A browser tour (desktop 1440 x 900 and phone 390 x 844) covers the summary, route list, advisor hover and select, checkpoint popup, playback, layers, edit trip and storm mode, with no page or console errors.
+---
+
+## DR-029: Review against a scoring checklist
+
+**Why.** Before submitting, the app was checked point by point against a reviewer-style checklist: exact thresholds, miles rather than checkpoint counts, No Travel handling, arrival-time weather, heatmap consistency and real-world latency.
+
+| Check | Finding | Action |
+|---|---|---|
+| Every threshold tested below, at and above | Already tested at each edge, including 55 mph exactly, 30,000 and 40,000 lb exactly, rain 1.00 and snow 3.0 exactly. Missing: just-below values for rain (0.499, 0.999) and snow (0.99, 1.99, 2.99), wind 54 and 44 with loads, and a test that a load rule can never lower a level | Added those cases and a test where snow is No Travel and the 35 to 44 mph rule (Severe) must not win |
+| Rank by miles, not checkpoint counts | Each checkpoint covers half the gap to each neighbor (DR-007), so miles per level add up to the route length at every spacing | None |
+| No Travel cannot win quietly | Compared first (DR-007). When every route crosses No Travel the sign turns yellow, reads "Least risky: Route X" and says every route crosses No Travel conditions | None |
+| Weather at arrival time, horizon | Arrival times from TomTom progress data (DR-003); times are compared as UTC timestamps; hours past the 16 day forecast are "No forecast" and a route without forecasts ranks last (DR-014) | None |
+| Heatmap agrees with the checkpoints | **Did not.** The default heatmap layer was weather risk without the load rules, while the dots include them. At 35,000 lb in 50 mph wind a dot was No Travel over a Severe-colored area | Default layer is now "Risk for this load"; the other is labelled "Weather only (no load rules)". The legend says the dots show weather when the truck gets there and the shading shows the time on the slider |
+| Real latency, not only call counts | Measured on the hosted app: new trip 5.2 s, repeat 0.6 s, heatmap 1.1 s, three concurrent new trips all done in 5.0 s without errors. Provider failures, timeouts and each kind of rate limit are covered by tests (502, 503 with a retry on the per-minute limit) | Numbers added to the README |
+| Cache policy and what changes with accounts | Expiry per cache is explicit (10 min, 30 min, 24 h); a cache outage is treated as a miss | README now says what a database would look like if saved trips or accounts were added |
