@@ -690,7 +690,7 @@ The rest-break note under the switch is now one line.
 | Found | Fixed | Before | After |
 |---|---|---|---|
 | The slider's thumb and fill lagged behind playback and stuck after a reset: MUI eases them over 150 ms, and playback sets the value every frame, which restarted the easing each time | Easing turned off on the thumb and track | After 12 s of play the value was 24.75 h and the thumb was drawn at 0.96 h | Within 0.12 h at every sample, and Play after the end starts at 0 h |
-| Trucks were a GeoJSON source updated with `setData` every frame, which makes the map re-tile the source and redo label placement | Trucks are three DOM markers moved with `setLngLat` | 4x: 34 to 38 fps | 4x: 51 to 53 fps, no long tasks |
+| Trucks were a GeoJSON source updated with `setData` every frame, which makes the map re-tile the source and redo label placement | Trucks are three DOM markers moved with `setLngLat` | 4x: 34 to 38 fps | 4x: 51 to 53 fps on the local build, 45 to 46 on the hosted app, no long tasks |
 | A new heatmap paint expression makes MapLibre rebuild the layer's tiles, and playback set one every frame | The shading moves in quarter-hour steps (the slider's step), and an unchanged step is skipped | about 4 tile rebuilds per frame | 8 a second at 2 h/s |
 | The timeline's toggle, layer menu and arrival flags re-rendered every frame | Memoized | about 130 component renders per frame | the slider and readout only |
 | The panel grew from 127 to 160 px when "Route A has arrived" wrapped the controls, so the slider jumped during playback | Controls share a row with the clock, and the description has two lines reserved | 2 heights | 153 px throughout |
@@ -709,5 +709,7 @@ At normal CPU playback holds the display's 165 fps in both cases.
 | Two gunicorn workers each had their own cache and rate-limit counts | One worker with 8 threads; the work is mostly waiting on TomTom and Open-Meteo |
 | `check --deploy` warnings | Added the clickjacking middleware and HSTS |
 | The API docs page listed a `rankings` field the API does not return | The schema lists the real top-level fields |
+
+**Hosted, after the deploy.** A repeat plan dropped from 0.14 to 0.6 s to 0.08 s, since every request on the replica now shares one cache. Three new trips at once all finished in 4.1 s without errors, so one worker with threads loses nothing to two workers here.
 
 **Checks.** 288 backend tests at 100% line and branch coverage, 68 frontend tests, ruff, oxlint, Prettier and the TypeScript build pass.
