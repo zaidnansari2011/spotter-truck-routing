@@ -103,6 +103,7 @@ export interface PlanRequest {
   load_lb: number
   hos?: boolean // add hours-of-service rest breaks
   demo?: 'storm' // simulated storm, only when the page is opened with ?demo=storm
+  simulation?: NonNullable<Plan['simulation']> // an earlier plan's storm, kept when re-planning
 }
 
 export type HeatLayer = 'risk' | 'risk_load' | 'wind' | 'rain' | 'snow'

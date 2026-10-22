@@ -88,7 +88,9 @@ export default function App() {
   function replanAt(departure: string) {
     if (!request) return
     setFormVersion((v) => v + 1) // remount the form so it shows the new departure
-    findRoutes({ ...request, departure })
+    // In demo mode the later departure must meet the storm the suggestion was based on.
+    const simulation = data?.simulation
+    findRoutes(simulation ? { ...request, departure, simulation } : { ...request, departure })
   }
 
   function changeAnchor(next: Anchor) {

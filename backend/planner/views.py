@@ -85,9 +85,18 @@ def plan(request: Request) -> Response:
             interval_mi=data["interval_mi"],
             hos=data["hos"],
             demo_storm=data.get("demo") == "storm",
+            storm=_storm(data),
         )
     )
     return Response(result)
+
+
+def _storm(data: dict) -> SimulatedStorm | None:
+    """The simulated storm a request pins (the `simulation` block), if any."""
+    if "simulation" not in data:
+        return None
+    lon, lat = data["simulation"]["center"]
+    return SimulatedStorm(center=(lat, lon), start_ts=data["simulation"]["start"].timestamp())
 
 
 @extend_schema(
@@ -104,8 +113,9 @@ def plan(request: Request) -> Response:
         },
     ),
     description=(
-        "Hourly weather for the heatmap grid, hours 0 to 48 from `start`. One row per point, "
-        "one value per hour: risk x100, wind mph, rain and snow in hundredths of an inch per hour."
+        "Hourly weather for the heatmap grid, hours 0 to 49 from the hour before `start`. One row per "
+        "point, one value per hour: risk x100, wind in tenths of a mph, rain and snow in thousandths "
+        "of an inch per hour."
     ),
 )
 @api_view(["POST"])
@@ -115,8 +125,6 @@ def corridor_weather(request: Request) -> Response:
     body.is_valid(raise_exception=True)
     data = body.validated_data
     points = [(lat, lon) for lon, lat in data["points"]]
-    storm = None
-    if "simulation" in data:
-        lon, lat = data["simulation"]["center"]
-        storm = SimulatedStorm(center=(lat, lon), start_ts=data["simulation"]["start"].timestamp())
-    return Response(corridor.corridor_frames(points, data["start"].timestamp(), data["load_lb"], storm))
+    return Response(
+        corridor.corridor_frames(points, data["start"].timestamp(), data["load_lb"], _storm(data))
+    )

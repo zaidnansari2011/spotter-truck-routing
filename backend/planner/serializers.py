@@ -18,6 +18,17 @@ class PlaceSerializer(serializers.Serializer):
     lon = serializers.FloatField(min_value=-180, max_value=180)
 
 
+class SimulationSerializer(serializers.Serializer):
+    center = serializers.ListField(child=serializers.FloatField(), min_length=2, max_length=2)
+    start = serializers.DateTimeField()
+
+    def validate_center(self, value):
+        lon, lat = value
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise serializers.ValidationError("center must be [lon, lat] within valid ranges.")
+        return value
+
+
 class PlanRequestSerializer(serializers.Serializer):
     origin = PlaceSerializer()
     destination = PlaceSerializer()
@@ -30,6 +41,10 @@ class PlanRequestSerializer(serializers.Serializer):
     )
     demo = serializers.ChoiceField(
         choices=["storm"], required=False, help_text="Lay a simulated storm over the forecast (demo only)"
+    )
+    simulation = SimulationSerializer(
+        required=False,
+        help_text="With demo=storm: an earlier plan's simulation block, so a later departure meets it",
     )
     hos = serializers.BooleanField(
         default=False, help_text="Add hours-of-service rest breaks (30 min after 8 h, 10 h off after 11 h)"
@@ -60,17 +75,6 @@ class SuggestQuerySerializer(serializers.Serializer):
 
 # The plan never builds a grid larger than this, and every point costs one forecast request.
 MAX_CORRIDOR_POINTS = MAX_GRID_POINTS
-
-
-class SimulationSerializer(serializers.Serializer):
-    center = serializers.ListField(child=serializers.FloatField(), min_length=2, max_length=2)
-    start = serializers.DateTimeField()
-
-    def validate_center(self, value):
-        lon, lat = value
-        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            raise serializers.ValidationError("center must be [lon, lat] within valid ranges.")
-        return value
 
 
 class CorridorRequestSerializer(serializers.Serializer):

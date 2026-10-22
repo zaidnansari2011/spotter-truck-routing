@@ -429,6 +429,24 @@ def test_demo_storm_hits_the_fastest_route_and_is_reported(fakes, minutes_past_h
     assert data["departure_options"]["suggestion"] is not None  # waiting lets the storm pass
 
 
+def test_replanning_a_later_departure_meets_the_same_storm(fakes):
+    fakes()
+    next_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    first = post(
+        body(demo="storm", load_lb=35_000, departure=(next_hour + timedelta(hours=2)).isoformat())
+    ).json()
+    later = first["departure_options"]["suggestion"]["departure"]
+
+    # Without the earlier storm, a new one would be placed on the new departure and hit again.
+    moved = post(body(demo="storm", load_lb=35_000, departure=later)).json()
+    pinned = post(body(demo="storm", load_lb=35_000, departure=later, simulation=first["simulation"])).json()
+
+    assert moved["simulation"]["start"] != first["simulation"]["start"]
+    assert pinned["simulation"] == first["simulation"]
+    assert moved["routes"][0]["summary"]["miles_by_level"]["No Travel"] > 0
+    assert pinned["routes"][0]["summary"]["miles_by_level"]["No Travel"] == 0  # the storm has passed
+
+
 def test_unknown_demo_is_rejected(fakes):
     fakes()
 

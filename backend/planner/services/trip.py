@@ -71,6 +71,9 @@ class TripRequest:
     interval_mi: int = 25
     hos: bool = False  # add hours-of-service rest breaks to arrival times
     demo_storm: bool = False  # lay a labelled, simulated storm over the real forecast
+    # With demo_storm: the storm of an earlier plan. Re-planning a later departure must meet the
+    # same storm, or the suggested safer departure would hit a storm that moved with it.
+    storm: SimulatedStorm | None = None
 
 
 def plan_trip(trip: TripRequest) -> dict:
@@ -81,7 +84,7 @@ def plan_trip(trip: TripRequest) -> dict:
     durations = [clock(p.total_seconds) if clock else p.total_seconds for p in route_set.profiles]
 
     every_checkpoint = [c for cps in checkpoints for c in cps]
-    storm = _demo_storm(route_set, departure_ts) if trip.demo_storm else None
+    storm = (trip.storm or _demo_storm(route_set, departure_ts)) if trip.demo_storm else None
     weather = weather_client(storm)
     # The window also covers later departures for the advisor (same locations, more hours).
     series = weather.hourly(
