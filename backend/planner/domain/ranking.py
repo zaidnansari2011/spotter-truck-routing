@@ -7,8 +7,8 @@ Routes are ordered by the brief's preferences, with No Travel miles compared fir
 A route with no forecast at all ranks after every route that has one: missing data must never
 look safer than known risk.
 
-Miles are compared at 1 decimal and average risk at 2 decimals, the precision the UI shows, so
-every recommendation can be explained from the numbers on screen.
+Miles are compared at 1 decimal, average risk at 2 decimals and travel time in whole minutes,
+the precision the UI shows, so every recommendation can be explained from the numbers on screen.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from .risk import RiskLevel
 
 MILES_DECIMALS = 1
 AVG_RISK_DECIMALS = 2
-TRADEOFF_MIN_SAVING_S = 30 * 60
+MINUTE_S = 60
+TRADEOFF_MIN_SAVING_S = 30 * MINUTE_S
 
 CRITERIA = ("forecast", "no_travel_miles", "severe_miles", "high_miles", "avg_risk", "duration")
 CRITERION_LABELS = {
@@ -63,7 +64,7 @@ class RouteScore:
             round(self.severe_miles, MILES_DECIMALS),
             round(self.high_miles, MILES_DECIMALS),
             avg,
-            self.duration_s,
+            round(self.duration_s / MINUTE_S),
         )
 
 
@@ -176,7 +177,7 @@ def _fmt(criterion: str, value: float) -> str:
     if criterion == "forecast":
         return "yes" if value == 0 else "no"
     if criterion == "duration":
-        return format_duration(value)
+        return format_duration(value * MINUTE_S)
     if criterion == "avg_risk":
         return "n/a" if math.isinf(value) else f"{value:.2f}"
     return f"{_fmt_miles(value)} mi"

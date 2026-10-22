@@ -162,6 +162,23 @@ def test_extending_the_window_refetches_and_merges(client):
 
 
 @respx.mock
+def test_merged_hours_expire_30_minutes_after_their_own_fetch(cache, sleeps):
+    FORECAST_URL.mock(side_effect=respond_with_window)
+    clock = [NOW]
+    with httpx.Client() as http:
+        client = OpenMeteoClient(http=http, cache=cache, now=lambda: clock[0], sleep=sleeps.append)
+        client.hourly(cells(1), NOW, NOW + H)  # fetches 00:00 and 01:00
+        clock[0] = NOW + 20 * 60
+        client.hourly(cells(1), NOW + H, NOW + 2 * H)  # fetches 01:00 and 02:00, keeps 00:00
+        clock[0] = NOW + 40 * 60  # 00:00 is now 40 minutes old
+
+        client.hourly(cells(1), NOW, NOW + 2 * H)
+
+    assert FORECAST_URL.call_count == 3
+    assert parse_iso(FORECAST_URL.calls.last.request.url.params["start_hour"]) == NOW
+
+
+@respx.mock
 def test_hours_beyond_the_16_day_horizon_are_unknown(client):
     FORECAST_URL.mock(side_effect=respond_with_window)
     horizon_end = NOW + 16 * 24 * H - H

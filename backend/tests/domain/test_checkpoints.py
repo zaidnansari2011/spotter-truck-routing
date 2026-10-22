@@ -99,6 +99,18 @@ def test_checkpoints_on_a_constant_speed_route():
     assert sum(c.covered_miles for c in checkpoints) == pytest.approx(103)
 
 
+@pytest.mark.parametrize(
+    ("total", "expected"),
+    [
+        (100.06, [0, 25, 50, 75, 100.06]),  # mile 100 would leave the destination 0.06 mi of road
+        (101.0, [0, 25, 50, 75, 100, 101]),  # a full mile apart: both kept
+        (0.5, [0, 0.5]),
+    ],
+)
+def test_no_checkpoint_within_a_mile_of_the_destination(total, expected):
+    assert checkpoint_miles(total, 25) == pytest.approx(expected)
+
+
 def test_eta_follows_anchor_speeds_not_an_average():
     # 100 miles: the first half at 60 mph (50 min), the second half at 30 mph (100 min).
     points = meridian_route(100, n_points=101)

@@ -105,6 +105,17 @@ def test_mile_differences_below_display_precision_tie():
     assert rank([a, b]).recommended_id == "B"
 
 
+def test_travel_times_in_the_same_minute_tie():
+    # Seconds apart would otherwise give "Shortest travel time: 1 h vs 1 h".
+    a = score_route("A", HOUR + 10, [(100, LOW)])
+    b = score_route("B", HOUR, [(100, LOW)])
+
+    ranking = rank([a, b])
+
+    assert ranking.recommended_id == "A"  # input order kept
+    assert ranking.comparisons[0].decided_by == "tie"
+
+
 def test_full_tie_keeps_input_order():
     a = route("A", 6)
     b = route("B", 6)

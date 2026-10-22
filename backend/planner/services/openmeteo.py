@@ -26,7 +26,7 @@ MAX_WORKERS = 4
 MAX_FORECAST_DAYS = 16
 CACHE_SECONDS = 30 * 60  # models update hourly
 MINUTE_S = 60
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 Cell = tuple[float, float]
 
@@ -74,17 +74,25 @@ class OpenMeteoClient:
 
         keys = {cell: _cache_key(cell) for cell in cells}
         cached = self._cache.get_many(keys.values()) if cells else {}
-        by_cell = {cell: cached.get(key, {}) for cell, key in keys.items()}
+        # Each hour keeps the time it was fetched, so hours merged into a newer entry still
+        # expire 30 minutes after their own fetch.
+        now = self._now()
+        stored = {
+            cell: {ts: row for ts, row in cached.get(key, {}).items() if now - row[0] < CACHE_SECONDS}
+            for cell, key in keys.items()
+        }
 
         if fetchable.start_ts <= fetchable.end_ts:
-            missing = [c for c in cells if any(h not in by_cell[c] for h in fetchable.hours)]
+            missing = [c for c in cells if any(h not in stored[c] for h in fetchable.hours)]
             if missing:
                 fetched = self._fetch(missing, fetchable)
                 for cell, hours in fetched.items():
-                    by_cell[cell] = {**by_cell[cell], **hours}
-                self._cache.set_many({keys[c]: by_cell[c] for c in fetched}, CACHE_SECONDS)
+                    stored[cell] |= {ts: (now, values) for ts, values in hours.items()}
+                self._cache.set_many({keys[c]: stored[c] for c in fetched}, CACHE_SECONDS)
 
-        return {cell: _series(by_cell[cell], wanted) for cell in cells}
+        return {
+            cell: _series({ts: values for ts, (_, values) in stored[cell].items()}, wanted) for cell in cells
+        }
 
     def _fetch(self, cells: list[Cell], window: _Window) -> dict[Cell, dict[int, tuple]]:
         batches = [cells[i : i + BATCH_SIZE] for i in range(0, len(cells), BATCH_SIZE)]

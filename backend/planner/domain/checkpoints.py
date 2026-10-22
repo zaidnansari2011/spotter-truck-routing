@@ -16,7 +16,7 @@ from itertools import pairwise
 from .geo import METERS_PER_MILE, LatLon, cumulative_m, lerp
 
 SAMPLING_INTERVALS_MI = (10, 25, 50)
-_EPSILON_MI = 1e-6
+MIN_FINAL_GAP_MI = 1.0
 
 
 @dataclass(frozen=True)
@@ -91,12 +91,16 @@ def build_profile(
 
 
 def checkpoint_miles(total_miles: float, interval_miles: float) -> list[float]:
-    """Mile 0, every `interval_miles`, and the destination (never duplicated)."""
+    """Mile 0, every `interval_miles`, and the destination.
+
+    A regular checkpoint within a mile of the destination is left out: the destination would
+    cover only a sliver of road, and its level would round away in the ranking's miles.
+    """
     if interval_miles <= 0:
         raise ValueError("interval_miles must be positive")
-    miles = []
-    step = 0
-    while step * interval_miles < total_miles - _EPSILON_MI:
+    miles = [0.0]
+    step = 1
+    while step * interval_miles <= total_miles - MIN_FINAL_GAP_MI:
         miles.append(step * interval_miles)
         step += 1
     miles.append(total_miles)
