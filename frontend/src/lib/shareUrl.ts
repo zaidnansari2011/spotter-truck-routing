@@ -35,7 +35,7 @@ export function decodeTrip(
   if (!origin || !destination || !Number.isFinite(load) || Number.isNaN(Date.parse(departure))) {
     return null
   }
-  const mi = params.get('mi') as IntervalKey
+  const mi = INTERVALS.find((key) => key === params.get('mi'))
   return {
     request: {
       origin,
@@ -44,7 +44,7 @@ export function decodeTrip(
       load_lb: load,
       hos: params.get('hos') === '1',
     },
-    interval: INTERVALS.includes(mi) ? mi : '25',
+    interval: mi ?? '25',
   }
 }
 

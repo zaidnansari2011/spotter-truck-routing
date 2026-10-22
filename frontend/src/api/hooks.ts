@@ -39,17 +39,19 @@ export function useCorridor(plan: Plan | undefined, start: string | undefined) {
   return useQuery({
     // The grid depends on the routes, not the sampling interval, so key it by the grid itself.
     queryKey: ['corridor', plan?.corridor.points, plan?.load_lb, plan?.simulation, start],
-    queryFn: ({ signal }) =>
-      apiFetch<CorridorFrames>('/corridor/', {
+    queryFn: ({ signal }) => {
+      if (!plan) throw new Error('No plan to fetch the corridor for') // never runs: see `enabled`
+      return apiFetch<CorridorFrames>('/corridor/', {
         method: 'POST',
         signal,
         body: JSON.stringify({
-          points: plan!.corridor.points,
+          points: plan.corridor.points,
           start,
-          load_lb: plan!.load_lb,
-          ...(plan!.simulation ? { simulation: plan!.simulation } : {}),
+          load_lb: plan.load_lb,
+          ...(plan.simulation ? { simulation: plan.simulation } : {}),
         }),
-      }),
+      })
+    },
     enabled: Boolean(plan && start && plan.corridor.points.length),
     staleTime: 10 * 60 * 1000,
   })
