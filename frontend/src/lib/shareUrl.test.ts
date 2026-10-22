@@ -25,6 +25,24 @@ describe('share links', () => {
     expect(encodeTrip(REQUEST, '25', new URLSearchParams('demo=storm'))).toMatch(/^demo=storm&/)
   })
 
+  it('keeps a re-planned demo trip on the same storm', () => {
+    const simulation = { center: [-87.1, 41.2] as [number, number], start: '2026-10-22T16:00:00Z' }
+    const search = encodeTrip({ ...REQUEST, simulation }, '25', new URLSearchParams('demo=storm'))
+
+    expect(decodeTrip(search, 'unused', NOW)?.request.simulation).toEqual(simulation)
+  })
+
+  it.each(['abc,41,2026-10-22T16:00:00Z', '-87,95,2026-10-22T16:00:00Z', '-87,41,later', '-87'])(
+    'drops a malformed storm and keeps the trip: %s',
+    (storm) => {
+      const search = `${encodeTrip(REQUEST, '25', new URLSearchParams())}&storm=${storm}`
+
+      const decoded = decodeTrip(search, 'unused', NOW)
+
+      expect(decoded?.request).toEqual(REQUEST)
+    },
+  )
+
   it('moves a departure that has passed to the fallback time', () => {
     const search = encodeTrip(
       { ...REQUEST, departure: '2026-10-20T08:00:00Z' },

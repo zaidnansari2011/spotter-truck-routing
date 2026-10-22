@@ -15,6 +15,11 @@ export function encodeTrip(
   params.set('load', String(request.load_lb))
   params.set('mi', interval)
   if (request.hos) params.set('hos', '1')
+  // A re-planned demo trip keeps its storm, so a reload or a shared link meets the same one.
+  if (request.simulation) {
+    const [lon, lat] = request.simulation.center
+    params.set('storm', `${lon.toFixed(5)},${lat.toFixed(5)},${request.simulation.start}`) // about 1 m
+  }
   return params.toString()
 }
 
@@ -36,6 +41,7 @@ export function decodeTrip(
     return null
   }
   const mi = INTERVALS.find((key) => key === params.get('mi'))
+  const simulation = decodeStorm(params.get('storm'))
   return {
     request: {
       origin,
@@ -43,9 +49,23 @@ export function decodeTrip(
       departure: Date.parse(departure) < now ? fallbackDeparture : departure,
       load_lb: load,
       hos: params.get('hos') === '1',
+      ...(simulation ? { simulation } : {}),
     },
     interval: mi ?? '25',
   }
+}
+
+function decodeStorm(text: string | null): PlanRequest['simulation'] {
+  if (!text) return undefined
+  const [lon, lat, start] = text.split(',')
+  const center: [number, number] = [Number(lon), Number(lat)]
+  const valid =
+    Number.isFinite(center[0]) &&
+    Number.isFinite(center[1]) &&
+    Math.abs(center[0]) <= 180 &&
+    Math.abs(center[1]) <= 90 &&
+    !Number.isNaN(Date.parse(start ?? ''))
+  return valid ? { center, start } : undefined
 }
 
 function encodePlace(place: Place): string {
