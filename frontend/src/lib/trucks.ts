@@ -1,10 +1,9 @@
-import type { FeatureCollection, Point } from 'geojson'
 import type { Plan, RouteOption } from '../api/types.ts'
 import { cumulativeMi } from './mapData.ts'
 
 export type TruckState = 'waiting' | 'driving' | 'arrived'
 
-interface Track {
+export interface Track {
   id: string
   recommended: boolean
   etaTs: number[] // checkpoint arrival times, seconds
@@ -44,20 +43,6 @@ export function truckAt(
   const t = (ts - etaTs[i - 1]) / (etaTs[i] - etaTs[i - 1])
   const driven = mile[i - 1] + (mile[i] - mile[i - 1]) * t
   return { coordinates: alongLine(track, driven * track.scale), state: 'driving' }
-}
-
-export function truckFeatures(tracks: Track[], ts: number): FeatureCollection<Point> {
-  return {
-    type: 'FeatureCollection',
-    features: tracks.map((track) => {
-      const { coordinates, state } = truckAt(track, ts)
-      return {
-        type: 'Feature',
-        properties: { id: track.id, recommended: track.recommended, state },
-        geometry: { type: 'Point', coordinates },
-      }
-    }),
-  }
 }
 
 function alongLine(track: Track, mi: number): [number, number] {

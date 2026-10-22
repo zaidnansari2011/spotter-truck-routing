@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Checkpoint, Plan, RouteOption } from '../api/types.ts'
 import { haversineMi } from './mapData.ts'
-import { arrivalNote, buildTracks, groupArrivals, truckAt, truckFeatures } from './trucks.ts'
+import { arrivalNote, buildTracks, groupArrivals, truckAt } from './trucks.ts'
 
 const DEG_MI = haversineMi([0, 0], [1, 0])
 const DEPART = Date.parse('2026-10-22T12:00:00Z') / 1000
@@ -58,10 +58,10 @@ describe('truckAt', () => {
   })
 })
 
-describe('truckFeatures', () => {
-  it('has one point per route with its state and recommendation', () => {
-    const fc = truckFeatures([track], DEPART + 3600)
-    expect(fc.features[0].properties).toEqual({ id: 'A', recommended: true, state: 'driving' })
+describe('buildTracks', () => {
+  it('keeps the route letter and whether it is recommended, for the truck marker', () => {
+    expect(track).toMatchObject({ id: 'A', recommended: true })
+    expect(truckAt(track, DEPART + 3600).state).toBe('driving')
   })
 })
 

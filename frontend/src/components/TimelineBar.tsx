@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -14,7 +14,7 @@ import PauseRounded from '@mui/icons-material/PauseRounded'
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded'
 import type { HeatLayer } from '../api/types.ts'
 import { formatClock, formatDuration, timeZoneName } from '../lib/format.ts'
-import { FRAME_COUNT, HEAT_LAYERS, THRESHOLDS } from '../lib/heatmap.ts'
+import { FRAME_COUNT, HEAT_LAYERS, THRESHOLDS, UNIT_SCALE } from '../lib/heatmap.ts'
 import { arrivalNote, groupArrivals, type Arrival } from '../lib/trucks.ts'
 import { tokens } from '../theme.ts'
 
@@ -40,10 +40,10 @@ interface Props {
 }
 
 function thresholdHint(layer: HeatLayer): string {
-  const [moderate] = THRESHOLDS[layer]
+  const moderate = THRESHOLDS[layer][0] / UNIT_SCALE[layer]
   if (layer === 'wind') return `Colored from ${moderate} mph (Moderate)`
   if (layer === 'rain' || layer === 'snow')
-    return `Colored from ${(moderate / 100).toFixed(2)} in/hr (Moderate)`
+    return `Colored from ${moderate.toFixed(2)} in/hr (Moderate)`
   return 'Colored from Moderate risk'
 }
 
@@ -80,19 +80,25 @@ export default function TimelineBar({
     const step = (now: number) => {
       const elapsed = (now - last) / 1000
       last = now
-      setTime((t) => {
-        const next = t + elapsed * speed
-        if (next >= LAST_HOUR) {
-          setPlaying(false)
-          return LAST_HOUR
-        }
-        return next
-      })
+      setTime((t) => Math.min(t + elapsed * speed, LAST_HOUR))
       frame.current = requestAnimationFrame(step)
     }
     frame.current = requestAnimationFrame(step)
     return () => cancelAnimationFrame(frame.current!)
   }, [playing, speed])
+
+  const ready = Boolean(hours && startTs) && !loading
+  // Playback stops at the last hour (pressing play again starts over) and while the forecast
+  // reloads, when the slider is disabled.
+  if (playing && (time >= LAST_HOUR || !ready)) setPlaying(false)
+
+  const changeAnchor = useCallback(
+    (next: Anchor) => {
+      setTime(0)
+      onAnchorChange(next)
+    },
+    [onAnchorChange],
+  )
 
   function togglePlay() {
     if (!playing && time >= LAST_HOUR) setTime(0)
@@ -103,7 +109,6 @@ export default function TimelineBar({
     setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])
   }
 
-  const ready = Boolean(hours && startTs) && !loading
   const moment = hours && startTs ? startTs + time * 3600 : undefined
   const relative =
     time === 0
@@ -173,6 +178,9 @@ export default function TimelineBar({
               color: tokens.centerLine,
               '& .MuiSlider-markLabel': { fontSize: '0.75rem', color: 'text.secondary' },
               '& .MuiSlider-rail': { opacity: 0.35, bgcolor: tokens.asphalt },
+              // MUI eases the thumb and track over 150 ms. Playback sets the value every frame, which
+              // restarts that easing each time, so the thumb never moved off its old position.
+              '& .MuiSlider-thumb, & .MuiSlider-track': { transition: 'none' },
             }}
           />
         </Box>
@@ -188,6 +196,8 @@ export default function TimelineBar({
         </Button>
       </Box>
 
+      {/* The clock and controls share a row and the description has two lines reserved, so the
+          panel keeps its height while the text changes during playback. */}
       <Box
         sx={{
           display: 'flex',
@@ -196,78 +206,102 @@ export default function TimelineBar({
           justifyContent: 'space-between',
           columnGap: 2,
           rowGap: 0.5,
-          pb: 0.5,
         }}
       >
-        <Box aria-live="polite" sx={{ minWidth: 170 }}>
-          {loading && (
-            <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <CircularProgress size={14} /> Loading the corridor forecast
-            </Typography>
-          )}
-          {!loading && error && (
-            <Typography variant="body2" color="error">
-              {error}
-            </Typography>
-          )}
-          {!loading && !error && moment && (
-            <>
-              <Typography sx={{ fontWeight: 800, lineHeight: 1.2 }}>
-                {formatClock(moment)} {timeZoneName(moment)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {[relative, arrivalNote(arrivals, moment), thresholdHint(layer)]
-                  .filter(Boolean)
-                  .join('. ')}
-              </Typography>
-            </>
-          )}
-          {!loading && !error && !moment && (
-            <Typography variant="body2" color="text.secondary">
-              Find routes to see the forecast along the trip
-            </Typography>
-          )}
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={anchor}
-            onChange={(_, value: Anchor | null) => {
-              if (!value) return
-              setTime(0)
-              onAnchorChange(value)
-            }}
-            aria-label="Start the timeline at"
-          >
-            <ToggleButton value="departure" sx={{ py: 0.25 }}>
-              From departure
-            </ToggleButton>
-            <ToggleButton value="now" sx={{ py: 0.25 }}>
-              From now
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <Select
-            size="small"
-            value={layer}
-            onChange={(e) => onLayerChange(e.target.value as HeatLayer)}
-            inputProps={{ 'aria-label': 'Weather shown on the map' }}
-            sx={{ fontSize: '0.875rem', '& .MuiSelect-select': { py: 0.5 } }}
-          >
-            {HEAT_LAYERS.map((option) => (
-              <MenuItem key={option.id} value={option.id}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </Box>
+        <Typography sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+          {!loading && !error && moment ? `${formatClock(moment)} ${timeZoneName(moment)}` : ' '}
+        </Typography>
+        <TimelineControls
+          anchor={anchor}
+          onAnchorChange={changeAnchor}
+          layer={layer}
+          onLayerChange={onLayerChange}
+        />
+      </Box>
+      <Box aria-live="polite" sx={{ minHeight: '2.9em', pt: 0.25, pb: 0.5, fontSize: '0.8125rem' }}>
+        {loading && (
+          <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={14} /> Loading the corridor forecast
+          </Typography>
+        )}
+        {!loading && error && (
+          <Typography variant="body2" color="error">
+            {error}
+          </Typography>
+        )}
+        {!loading && !error && moment && (
+          <Typography variant="body2" color="text.secondary">
+            {[relative, arrivalNote(arrivals, moment), thresholdHint(layer)]
+              .filter(Boolean)
+              .join('. ')}
+          </Typography>
+        )}
+        {!loading && !error && !moment && (
+          <Typography variant="body2" color="text.secondary">
+            Find routes to see the forecast along the trip
+          </Typography>
+        )}
       </Box>
     </Paper>
   )
 }
 
+/**
+ * Timeline start and weather layer. Memoized, like ArrivalFlags: they do not change while the
+ * forecast plays, and re-rendering them every frame was most of the timeline's render work.
+ */
+const TimelineControls = memo(function TimelineControls({
+  anchor,
+  onAnchorChange,
+  layer,
+  onLayerChange,
+}: {
+  anchor: Anchor
+  onAnchorChange: (anchor: Anchor) => void
+  layer: HeatLayer
+  onLayerChange: (layer: HeatLayer) => void
+}) {
+  return (
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        value={anchor}
+        onChange={(_, value: Anchor | null) => value && onAnchorChange(value)}
+        aria-label="Start the timeline at"
+      >
+        <ToggleButton value="departure" sx={{ py: 0.25 }}>
+          From departure
+        </ToggleButton>
+        <ToggleButton value="now" sx={{ py: 0.25 }}>
+          From now
+        </ToggleButton>
+      </ToggleButtonGroup>
+      <Select
+        size="small"
+        value={layer}
+        onChange={(e) => onLayerChange(e.target.value as HeatLayer)}
+        inputProps={{ 'aria-label': 'Weather shown on the map' }}
+        sx={{ fontSize: '0.875rem', '& .MuiSelect-select': { py: 0.5 } }}
+      >
+        {HEAT_LAYERS.map((option) => (
+          <MenuItem key={option.id} value={option.id}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
+  )
+})
+
 /** A route letter above the slider at the hour each truck arrives, so the trip's end is visible. */
-function ArrivalFlags({ arrivals, startTs }: { arrivals: Arrival[]; startTs: number }) {
+const ArrivalFlags = memo(function ArrivalFlags({
+  arrivals,
+  startTs,
+}: {
+  arrivals: Arrival[]
+  startTs: number
+}) {
   return (
     <Box aria-hidden sx={{ position: 'absolute', left: 8, right: 8, top: 0, height: 26 }}>
       {groupArrivals(arrivals, startTs).map((group) => {
@@ -311,4 +345,4 @@ function ArrivalFlags({ arrivals, startTs }: { arrivals: Arrival[]; startTs: num
       })}
     </Box>
   )
-}
+})

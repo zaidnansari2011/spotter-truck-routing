@@ -53,6 +53,7 @@ export default function MapView({
   const [map, setMap] = useState<MapLibreMap | null>(null)
   // Map event handlers are bound once; they read the latest props through this ref.
   const latest = useRef({ plan, selectedId, onSelectRoute })
+  const popup = useRef<Popup | null>(null)
   const readyCallback = useRef(onMapReady)
   useLayoutEffect(() => {
     latest.current = { plan, selectedId, onSelectRoute }
@@ -80,7 +81,7 @@ export default function MapView({
         .querySelector('.maplibregl-ctrl-attrib')
         ?.classList.remove('maplibregl-compact-show')
       addRouteLayers(instance)
-      bindInteractions(instance, latest)
+      bindInteractions(instance, latest, popup)
       setMap(instance)
       readyCallback.current?.(instance)
       // Development only: lets browser checks find features on the map. Removed from builds.
@@ -92,25 +93,36 @@ export default function MapView({
   // Route lines, risk-colored selected route, checkpoints.
   useEffect(() => {
     if (!map) return
+    // An open checkpoint popup describes the previous route or plan.
+    popup.current?.remove()
     const selected = plan?.routes.find((r) => r.id === selectedId)
     source(map, 'routes').setData(plan && selectedId ? routeLines(plan, selectedId) : EMPTY)
     source(map, 'risk').setData(selected ? riskSegments(selected) : EMPTY)
     source(map, 'checkpoints').setData(selected ? checkpointPoints(selected) : EMPTY)
   }, [map, plan, selectedId])
 
-  // Frame all routes when a new plan arrives. On phones the timeline sits under the map,
-  // so the map needs no room for it.
+  // Frame all routes when the routes change. A new checkpoint spacing or departure keeps the
+  // same roads, so it keeps the driver's zoom. On phones the timeline sits under the map, so the
+  // map needs no room for it.
+  const boundsKey = plan ? planBounds(plan).flat().join(',') : ''
   useEffect(() => {
-    if (!map || !plan) return
+    if (!map || !boundsKey) return
+    const [west, south, east, north] = boundsKey.split(',').map(Number)
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const compact = map.getContainer().clientWidth < 600
-    map.fitBounds(planBounds(plan), {
-      padding: compact
-        ? { top: 40, bottom: 40, left: 24, right: 24 }
-        : { top: 70, bottom: 150, left: 60, right: 60 },
-      duration: reduceMotion ? 0 : 900,
-    })
-  }, [map, plan])
+    map.fitBounds(
+      [
+        [west, south],
+        [east, north],
+      ],
+      {
+        padding: compact
+          ? { top: 40, bottom: 40, left: 24, right: 24 }
+          : { top: 70, bottom: 150, left: 60, right: 60 },
+        duration: reduceMotion ? 0 : 900,
+      },
+    )
+  }, [map, boundsKey])
 
   // Route chips: route letter and travel time, clickable.
   useEffect(() => {
@@ -173,7 +185,7 @@ function blockChipSpace(map: MapLibreMap, markers: Marker[]) {
   source(map, 'chip-blockers').setData({ type: 'FeatureCollection', features })
 }
 function addRouteLayers(map: MapLibreMap) {
-  for (const id of ['heat', 'routes', 'risk', 'checkpoints', 'chip-blockers', 'trucks']) {
+  for (const id of ['heat', 'routes', 'risk', 'checkpoints', 'chip-blockers']) {
     map.addSource(id, { type: 'geojson', data: EMPTY })
   }
 
@@ -225,8 +237,9 @@ function addRouteLayers(map: MapLibreMap) {
     paint: {
       'circle-color': ['get', 'color'],
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3.5, 8, 7],
-      'circle-stroke-color': tokens.laneWhite,
-      'circle-stroke-width': 1.5,
+      // A dark ring keeps yellow (Moderate) dots visible on the light basemap.
+      'circle-stroke-color': tokens.asphalt,
+      'circle-stroke-width': 1.25,
     },
   })
   map.addLayer({
@@ -263,37 +276,6 @@ function addRouteLayers(map: MapLibreMap) {
       'icon-padding': 4,
     },
   })
-
-  // Trucks follow the timeline slider; drawn last so they sit on top of everything.
-  map.addLayer({
-    id: 'truck-dots',
-    type: 'circle',
-    source: 'trucks',
-    // A truck that has arrived leaves the map; the timeline says when it arrived.
-    filter: ['!=', ['get', 'state'], 'arrived'],
-    paint: {
-      'circle-radius': 10,
-      'circle-color': ['case', ['get', 'recommended'], tokens.signGreen, tokens.asphalt],
-      'circle-stroke-color': tokens.centerLine,
-      'circle-stroke-width': 2.5,
-      'circle-opacity': ['case', ['==', ['get', 'state'], 'driving'], 1, 0.55],
-      'circle-stroke-opacity': ['case', ['==', ['get', 'state'], 'driving'], 1, 0.55],
-    },
-  })
-  map.addLayer({
-    id: 'truck-labels',
-    type: 'symbol',
-    source: 'trucks',
-    filter: ['!=', ['get', 'state'], 'arrived'],
-    layout: {
-      'text-field': ['get', 'id'],
-      'text-font': ['Noto Sans Bold'],
-      'text-size': 11,
-      'text-allow-overlap': true,
-      'text-ignore-placement': true,
-    },
-    paint: { 'text-color': tokens.laneWhite },
-  })
 }
 
 function bindInteractions(
@@ -305,6 +287,7 @@ function bindInteractions(
       onSelectRoute: (id: string) => void
     }
   },
+  popup: { current: Popup | null },
 ) {
   for (const layer of ['routes-other', 'checkpoint-dots']) {
     map.on('mouseenter', layer, () => (map.getCanvas().style.cursor = 'pointer'))
@@ -320,7 +303,8 @@ function bindInteractions(
     const index = event.features?.[0]?.properties?.index
     const checkpoint = route?.checkpoints[index]
     if (!route || !checkpoint) return
-    new Popup({ closeButton: true, maxWidth: '260px', offset: 10 })
+    popup.current?.remove()
+    popup.current = new Popup({ closeButton: true, maxWidth: '260px', offset: 10 })
       .setLngLat([checkpoint.lon, checkpoint.lat])
       .setHTML(checkpointPopupHtml(checkpoint, route.id))
       .addTo(map)
@@ -364,6 +348,23 @@ const mapStyles = {
     background: tokens.laneWhite,
     color: tokens.asphalt,
   },
+  // Trucks follow the timeline slider (useTruckLayer).
+  '& .truck-marker': {
+    display: 'grid',
+    placeItems: 'center',
+    width: '22px',
+    height: '22px',
+    borderRadius: '50%',
+    border: `2.5px solid ${tokens.centerLine}`,
+    background: tokens.asphalt,
+    color: tokens.laneWhite,
+    font: `700 11px/1 ${fontFamily}`,
+    pointerEvents: 'none',
+    zIndex: 1, // above the route chips, which are re-created when the selection changes
+  },
+  '& .truck-marker[data-recommended="true"]': { background: tokens.signGreen },
+  '& .truck-marker[data-state="waiting"]': { opacity: 0.55 },
+  '& .truck-marker[data-state="arrived"]': { display: 'none' },
   '& .maplibregl-popup-content': {
     font: `14px/1.4 ${fontFamily}`,
     color: tokens.asphalt,

@@ -35,6 +35,7 @@ export default function App() {
   const plan = usePlan(request, interval)
   const [chosenId, setChosenId] = useState<string>()
   const [formVersion, setFormVersion] = useState(0)
+  const [tripVersion, setTripVersion] = useState(0)
   const [editing, setEditing] = useState(false)
   const [map, setMap] = useState<MapLibreMap | null>(null)
   const [anchor, setAnchor] = useState<Anchor>('departure')
@@ -59,6 +60,7 @@ export default function App() {
         : undefined,
     [data, corridor.data, heatLayer],
   )
+  const tripArrivals = useMemo(() => (data ? arrivals(data) : undefined), [data])
   const setHeatTime = useHeatLayer(map, heatFeatures, data?.corridor.spacing_deg, heatLayer)
   const setTruckTime = useTruckLayer(map, data)
   const setTimelineTime = useCallback(
@@ -79,6 +81,7 @@ export default function App() {
   function findRoutes(next: PlanRequest) {
     setRequest(DEMO_STORM ? { ...next, demo: 'storm' } : next)
     setChosenId(undefined) // a new trip starts on its recommended route
+    setTripVersion((v) => v + 1) // and its timeline at hour 0, paused
     setEditing(false)
   }
 
@@ -210,6 +213,7 @@ export default function App() {
           </MapView>
         </Box>
         <TimelineBar
+          key={tripVersion}
           hours={corridor.data?.hours}
           startTs={timelineStart ? Date.parse(timelineStart) / 1000 : undefined}
           loading={corridor.isFetching}
@@ -219,7 +223,7 @@ export default function App() {
           layer={heatLayer}
           onLayerChange={setHeatLayer}
           onTimeChange={setTimelineTime}
-          arrivals={data ? arrivals(data) : undefined}
+          arrivals={tripArrivals}
         />
       </Box>
     </Box>
