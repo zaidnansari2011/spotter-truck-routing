@@ -14,11 +14,14 @@ interface Props {
 
 export default function PlaceField({ label, value, onChange, error }: Props) {
   const [input, setInput] = useState('')
-  const suggestions = usePlaceSuggestions(input)
+  // Only what the user types is searched. The field also fills itself with the chosen place's
+  // label (a shared link, a picked option), and searching for that would waste a request.
+  const [query, setQuery] = useState('')
+  const suggestions = usePlaceSuggestions(query)
   const options = suggestions.data ?? []
 
   const noOptionsText =
-    input.trim().length < 2
+    query.trim().length < 2
       ? 'Type at least 2 letters'
       : suggestions.isError
         ? 'Place search is unavailable. Try again shortly.'
@@ -29,7 +32,10 @@ export default function PlaceField({ label, value, onChange, error }: Props) {
       value={value}
       onChange={(_, place) => onChange(place)}
       inputValue={input}
-      onInputChange={(_, text) => setInput(text)}
+      onInputChange={(_, text, reason) => {
+        setInput(text)
+        if (reason !== 'reset') setQuery(text)
+      }}
       options={
         value && !options.some((o) => o.label === value.label) ? [value, ...options] : options
       }
