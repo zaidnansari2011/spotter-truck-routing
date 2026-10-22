@@ -95,11 +95,11 @@ The hosted app measured from India on 2026-10-22, in Chrome on a laptop with a 1
 | New trip, nothing cached (3 routes, 25 mile checkpoints) | 3 to 7 s depending on the trip, mostly TomTom computing truck routes |
 | Same trip again (cached) | 0.08 s |
 | Switching checkpoint spacing (routes cached) | 0.45 s; instant for one already seen |
-| Heatmap frames (about 290 grid points x 49 hours) | 0.4 to 0.8 s, 38 KB |
+| Heatmap frames (about 290 grid points x 50 hours) | 0.4 to 0.8 s, 38 KB |
 | Three different new trips at the same moment | all done in 4.1 s, no errors |
 | JavaScript on first load | 550 KB gzipped, in four files cached for a year |
-| Timeline playback | 165 fps (the display's limit); 45 to 53 fps with the CPU slowed 4x; no long tasks |
-| Requests while dragging the slider | 0: the 49 hourly frames are already on the map and the GPU blends between hours |
+| Timeline playback | 165 fps (the display's limit); about 40 to 65 fps across runs with the CPU slowed 4x, with no long tasks |
+| Requests while dragging the slider | 0: the hourly frames are already on the map and the GPU blends between hours |
 
 Forecasts are cached per 5 km grid cell for 30 minutes, so toggling the timeline start or planning a similar trip reuses them ([DR-017](docs/decisions.md#dr-017-forecast-batching-and-caching)).
 
@@ -109,7 +109,7 @@ Forecasts are cached per 5 km grid cell for 30 minutes, so toggling the timeline
 Browser: React, TypeScript, Material UI, MapLibre GL (WebGL map)
    |  GET  /api/suggest/    place search (cached 24 h)
    |  POST /api/plan/       routes, checkpoints at the chosen 10/25/50 mi spacing, risk, ranking, heatmap grid
-   |  POST /api/corridor/   49 hourly forecast frames for the heatmap grid
+   |  POST /api/corridor/   50 hourly forecast frames (hours 0 to 49) for the heatmap grid
 Django + Django REST Framework (stateless, no database)
    planner/domain/     pure logic, no I/O: geometry, checkpoints, forecast timing, risk, ranking, corridor grid
    planner/services/   TomTom and Open-Meteo clients, trip planning, heatmap frames

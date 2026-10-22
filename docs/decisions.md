@@ -428,7 +428,7 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 
 **Two requests instead of one.** The plan response carries the grid points (about 10 KB). The hourly frames come from a separate stateless `POST /api/corridor` (points, hour-0 time, load). Routes appear on the map as soon as the plan returns while the heatmap loads in parallel, and the Departure / Now slider toggle (DR-009) is just a second corridor request.
 
-**Payload format.** One row per grid point and one value per hour, for hours 0 to 48 (49 frames), as small integers:
+**Payload format.** One row per grid point and one value per hour, for hours 0 to 48 (49 frames; 50 since DR-031), as small integers:
 - `risk`: weather-only risk index x100 (0 to 400), the default "weather heatmap" layer
 - `risk_load`: the same with load rules applied, for the "Risk for this load" layer
 - `wind` in whole mph, `rain` and `snow` in hundredths of an inch per hour (now tenths of a mph and thousandths of an inch, DR-031)
@@ -690,7 +690,7 @@ The rest-break note under the switch is now one line.
 | Found | Fixed | Before | After |
 |---|---|---|---|
 | The slider's thumb and fill lagged behind playback and stuck after a reset: MUI eases them over 150 ms, and playback sets the value every frame, which restarted the easing each time | Easing turned off on the thumb and track | After 12 s of play the value was 24.75 h and the thumb was drawn at 0.96 h | Within 0.12 h at every sample, and Play after the end starts at 0 h |
-| Trucks were a GeoJSON source updated with `setData` every frame, which makes the map re-tile the source and redo label placement | Trucks are three DOM markers moved with `setLngLat` | 4x: 34 to 38 fps | 4x: 51 to 53 fps on the local build, 45 to 46 on the hosted app, no long tasks |
+| Trucks were a GeoJSON source updated with `setData` every frame, which makes the map re-tile the source and redo label placement | Trucks are three DOM markers moved with `setLngLat` | 4x: 34 to 38 fps | 4x: about 40 to 65 fps across repeated runs (CPU slowdown emulation varies run to run), no long tasks |
 | A new heatmap paint expression makes MapLibre rebuild the layer's tiles, and playback set one every frame | The shading moves in quarter-hour steps (the slider's step), and an unchanged step is skipped | about 4 tile rebuilds per frame | 8 a second at 2 h/s |
 | The timeline's toggle, layer menu and arrival flags re-rendered every frame | Memoized | about 130 component renders per frame | the slider and readout only |
 | The panel grew from 127 to 160 px when "Route A has arrived" wrapped the controls, so the slider jumped during playback | Controls share a row with the clock, and the description has two lines reserved | 2 heights | 153 px throughout |
@@ -699,6 +699,14 @@ The rest-break note under the switch is now one line.
 At normal CPU playback holds the display's 165 fps in both cases.
 
 **Behavior.** A checkpoint popup now closes when the route or plan changes. Changing the spacing keeps the driver's zoom (the map only re-frames when the roads change). Playback stops while the timeline reloads, and a new trip starts its timeline at hour 0. Phones get a one-line risk legend, and checkpoint dots have a dark ring so yellow stays visible on the light basemap.
+
+**Follow-up: three smaller fixes.**
+
+| Found | Fixed |
+|---|---|
+| Frames start on the hour before the departure, so with a 2:40 departure slider hour 48 is 48.67 h into the frames, past the last one: the shading held still for the final 40 minutes | The corridor returns 50 frames (hours 0 to 49); the slider still runs 0 to 48 h |
+| Selecting a route rebuilt all three route chips and their label space (one 164 ms task at 4x CPU slowdown) | Chips are built once per plan; selecting only flips their selected and recommended attributes |
+| Opening a shared link searched for the two pre-filled place names, two wasted TomTom requests | Place search runs only on what the user types, not on the label the field fills in itself |
 
 **Security and hosting.**
 
