@@ -1,4 +1,4 @@
-"""Hourly heatmap frames for the corridor grid: 49 frames covering hours 0 to 48 (DR-019).
+"""Hourly heatmap frames for the corridor grid: 50 frames covering hours 0 to 49 (DR-019, DR-031).
 
 Values are small integers to keep the payload compact (the browser divides them back):
 risk indices x100 (0-400), wind in tenths of a mph, rain and snow in thousandths of an inch per
@@ -17,7 +17,9 @@ from planner.domain.scenario import SimulatedStorm
 from planner.services import trip
 from planner.services.openmeteo import snap
 
-FRAME_COUNT = 49  # hour 0 through hour 48
+# Hour 0 through hour 49. The slider runs 48 h from the exact departure, while frames start on the
+# hour before it, so the last slider hour needs the frame after hour 48 to keep blending.
+FRAME_COUNT = 50
 
 
 def corridor_frames(

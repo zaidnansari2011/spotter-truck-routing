@@ -34,10 +34,11 @@ export const UNIT_SCALE: Record<HeatLayer, number> = {
   snow: 1000,
 }
 
-export const FRAME_COUNT = 49
+// Hours 0 to 49: one past the slider's 48, because frames start on the hour before the departure.
+export const FRAME_COUNT = 50
 const RADIUS_FACTOR = 1.8
 
-/** One point per grid cell with its 49 hourly values as v0..v48 (missing hours become 0). */
+/** One point per grid cell with its hourly values as v0..v49 (missing hours become 0). */
 export function corridorFeatures(
   points: [number, number][],
   frames: CorridorFrames,

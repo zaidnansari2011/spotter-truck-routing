@@ -9,10 +9,10 @@ import {
 } from './heatmap.ts'
 import { LEVELS } from './risk.ts'
 
-const row = (value: number | null) => Array.from({ length: 49 }, () => value)
+const row = (value: number | null) => Array.from({ length: 50 }, () => value)
 
 const FRAMES: CorridorFrames = {
-  hours: Array.from({ length: 49 }, (_, h) => 1_800_000_000 + h * 3600),
+  hours: Array.from({ length: 50 }, (_, h) => 1_800_000_000 + h * 3600),
   risk: [row(150), row(null)],
   risk_load: [row(300), row(null)],
   wind: [row(30), row(null)],
@@ -21,7 +21,7 @@ const FRAMES: CorridorFrames = {
 }
 
 describe('corridorFeatures', () => {
-  it('puts the 49 hourly values of the chosen layer on each point', () => {
+  it('puts the 50 hourly values of the chosen layer on each point', () => {
     const fc = corridorFeatures(
       [
         [-100, 40],
@@ -33,8 +33,8 @@ describe('corridorFeatures', () => {
 
     expect(fc.features).toHaveLength(2)
     expect(fc.features[0].geometry.coordinates).toEqual([-100, 40])
-    expect(Object.keys(fc.features[0].properties!)).toHaveLength(49)
-    expect(fc.features[0].properties!.v48).toBe(30)
+    expect(Object.keys(fc.features[0].properties!)).toHaveLength(50)
+    expect(fc.features[0].properties!.v49).toBe(30)
   })
 
   it('draws missing hours as calm (transparent) rather than failing', () => {
@@ -59,9 +59,14 @@ describe('valueAt', () => {
     expect(valueAt(12.25)).toEqual(['+', ['*', ['get', 'v12'], 0.75], ['*', ['get', 'v13'], 0.25]])
   })
 
-  it('clamps to the 0 to 48 hour range', () => {
+  it('keeps blending at the end of the slider when the departure is not on the hour', () => {
+    // Slider hour 48 with a departure 45 minutes past the hour is frame position 48.75.
+    expect(valueAt(48.75)).toEqual(['+', ['*', ['get', 'v48'], 0.25], ['*', ['get', 'v49'], 0.75]])
+  })
+
+  it('clamps to the frames there are', () => {
     expect(valueAt(-3)).toEqual(['get', 'v0'])
-    expect(valueAt(60)).toEqual(['get', 'v48'])
+    expect(valueAt(60)).toEqual(['get', 'v49'])
   })
 })
 

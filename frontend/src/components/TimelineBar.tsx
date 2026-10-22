@@ -14,20 +14,20 @@ import PauseRounded from '@mui/icons-material/PauseRounded'
 import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded'
 import type { HeatLayer } from '../api/types.ts'
 import { formatClock, formatDuration, timeZoneName } from '../lib/format.ts'
-import { FRAME_COUNT, HEAT_LAYERS, THRESHOLDS, UNIT_SCALE } from '../lib/heatmap.ts'
+import { HEAT_LAYERS, THRESHOLDS, UNIT_SCALE } from '../lib/heatmap.ts'
 import { arrivalNote, groupArrivals, type Arrival } from '../lib/trucks.ts'
 import { tokens } from '../theme.ts'
 
 export type Anchor = 'departure' | 'now'
 
-const LAST_HOUR = FRAME_COUNT - 1
+const LAST_HOUR = 48 // the brief's 0 to 48 hour slider
 // Forecast hours played per second. 2 plays the 48 hours in 24 s, slow enough to follow the trucks.
 const SPEEDS = [1, 2, 6]
 const DEFAULT_SPEED = 2
 const MARKS = [0, 12, 24, 36, 48].map((value) => ({ value, label: `${value} h` }))
 
 interface Props {
-  hours?: number[] // unix seconds of the 49 hourly forecast frames
+  hours?: number[] // unix seconds of the hourly forecast frames (hours 0 to 49)
   startTs?: number // unix seconds the slider's 0 stands for: the departure or the moment "now" was picked
   loading: boolean
   error?: string

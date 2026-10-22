@@ -34,17 +34,18 @@ def test_plan_response_includes_the_corridor_grid(fakes):
     assert min(lons) < -99.5 and max(lons) > -95.5  # covers the trip from end to end
 
 
-def test_frames_cover_hours_0_to_48_for_every_point(fakes):
+def test_frames_cover_the_whole_slider_for_every_point(fakes):
     fakes(weather=FakeWeather(lambda lat, lon: (30.0, 0.3, 1.2)))
 
     data = corridor(request()).json()
 
-    assert len(data["hours"]) == 49
+    # START is 30 minutes past an hour, so slider hour 48 falls between frames 48 and 49.
+    assert len(data["hours"]) == 50
     assert data["hours"][0] == math.floor(START.timestamp() / HOUR_S) * HOUR_S
-    assert data["hours"][48] - data["hours"][0] == 48 * HOUR_S
+    assert data["hours"][-1] >= START.timestamp() + 48 * HOUR_S
     for key in ("risk", "risk_load", "wind", "rain", "snow"):
         assert len(data[key]) == len(POINTS)
-        assert all(len(row) == 49 for row in data[key])
+        assert all(len(row) == 50 for row in data[key])
     assert data["wind"][0][0] == 300  # tenths of a mph
     assert data["rain"][0][0] == 300  # thousandths of an inch per hour
     assert data["snow"][0][0] == 1200
@@ -80,7 +81,7 @@ def test_hours_without_a_forecast_are_null(fakes):
     data = corridor(request()).json()
 
     assert data["risk"][0][0] is None
-    assert data["wind"][2][48] is None
+    assert data["wind"][2][49] is None
 
 
 @pytest.mark.parametrize(
