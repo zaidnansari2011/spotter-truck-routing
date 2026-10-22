@@ -124,7 +124,9 @@ export default function MapView({
     )
   }, [map, boundsKey])
 
-  // Route chips: route letter and travel time, clickable.
+  // Route chips: route letter and travel time, clickable. Built once per plan; selecting a route
+  // only flips their data attributes (below), so the chips and their label space stay put.
+  const chips = useRef<Marker[]>([])
   useEffect(() => {
     if (!map || !plan) return
     const anchors = chipAnchors(plan)
@@ -132,8 +134,7 @@ export default function MapView({
       const chip = document.createElement('button')
       chip.type = 'button'
       chip.className = 'route-chip'
-      chip.dataset.selected = String(route.id === selectedId)
-      chip.dataset.recommended = String(route.id === recommendedId)
+      chip.dataset.routeId = route.id
       const worst = worstLevel(route.summary)
       const summary = `${formatDuration(route.duration_s)}, ${formatMiles(route.distance_mi)}`
       chip.setAttribute('aria-label', `Route ${route.id}: ${summary}, worst weather ${worst.label}`)
@@ -148,9 +149,21 @@ export default function MapView({
       return new Marker({ element: chip }).setLngLat(anchors[route.id]).addTo(map)
     })
     blockChipSpace(map, markers)
+    chips.current = markers
     return () => {
       markers.forEach((m) => m.remove())
+      chips.current = []
       source(map, 'chip-blockers').setData(EMPTY)
+    }
+  }, [map, plan])
+
+  // Runs after the effect above in the same commit, including when the chips were only just built
+  // because the map finished loading after the plan arrived.
+  useEffect(() => {
+    for (const marker of chips.current) {
+      const chip = marker.getElement()
+      chip.dataset.selected = String(chip.dataset.routeId === selectedId)
+      chip.dataset.recommended = String(chip.dataset.routeId === recommendedId)
     }
   }, [map, plan, selectedId, recommendedId])
 
@@ -360,7 +373,7 @@ const mapStyles = {
     color: tokens.laneWhite,
     font: `700 11px/1 ${fontFamily}`,
     pointerEvents: 'none',
-    zIndex: 1, // above the route chips, which are re-created when the selection changes
+    zIndex: 1, // above the route chips, which are re-created for each plan
   },
   '& .truck-marker[data-recommended="true"]': { background: tokens.signGreen },
   '& .truck-marker[data-state="waiting"]': { opacity: 0.55 },
