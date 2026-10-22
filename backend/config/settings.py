@@ -40,6 +40,7 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.gzip.GZipMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -84,6 +85,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 FRONTEND_DIST = Path(os.environ.get("FRONTEND_DIST", REPO_ROOT / "frontend" / "dist"))
 WHITENOISE_ROOT = FRONTEND_DIST if FRONTEND_DIST.exists() else None
 WHITENOISE_INDEX_FILE = True
+# Vite puts a content hash in every file name under /assets/, so browsers may keep them for a year.
+WHITENOISE_IMMUTABLE_FILE_TEST = lambda path, url: url.startswith("/assets/")  # noqa: E731
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
@@ -92,6 +95,9 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "planner.api_errors.api_exception_handler",
+    # The Container Apps ingress is the one proxy in front of the app. Without this, throttling keys
+    # on the whole X-Forwarded-For header, which any client can vary to get a fresh limit.
+    "NUM_PROXIES": 1,
     # Protects the TomTom quota (about 2,500 requests/day) from refresh loops; generous for real use.
     "DEFAULT_THROTTLE_RATES": {"plan": "60/hour", "suggest": "600/hour", "corridor": "120/hour"},
 }
@@ -105,6 +111,7 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 
 LOGGING = {
     "version": 1,

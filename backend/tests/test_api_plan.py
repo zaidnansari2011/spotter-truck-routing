@@ -70,11 +70,7 @@ def test_response_shape_for_routes_and_checkpoints(fakes):
 
 def test_checkpoint_etas_follow_departure_and_route_time(fakes):
     fakes()
-    departure = datetime(2026, 10, 22, 14, 0, tzinfo=timezone.utc)
-    if departure < datetime.now(timezone.utc):
-        departure = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(
-            minute=0, second=0, microsecond=0
-        )
+    departure = (datetime.now(timezone.utc) + timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
 
     data = post(body(departure=departure.isoformat())).json()
 
@@ -228,6 +224,22 @@ def test_plan_requests_are_rate_limited(fakes, monkeypatch):
 
     assert statuses == [200, 200, 429]
     assert post(body()).json()["code"] == "rate_limited"
+
+
+def test_rate_limit_cannot_be_dodged_by_faking_forwarded_for(fakes, monkeypatch):
+    fakes()
+    monkeypatch.setattr(PlanThrottle, "THROTTLE_RATES", {"plan": "1/hour"})
+    client = APIClient()
+
+    # The ingress appends the real client address last; anything before it is the client's own.
+    statuses = [
+        client.post(
+            "/api/plan/", body(), format="json", HTTP_X_FORWARDED_FOR=f"{fake}, 203.0.113.7"
+        ).status_code
+        for fake in ("1.1.1.1", "2.2.2.2")
+    ]
+
+    assert statuses == [200, 429]
 
 
 def test_suggest_returns_places_and_caches_them(fakes):

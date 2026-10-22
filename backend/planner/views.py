@@ -51,10 +51,23 @@ def suggest(request: Request) -> Response:
 @extend_schema(
     request=PlanRequestSerializer,
     responses=inline_serializer(
-        "Plan", {"routes": serializers.ListField(), "rankings": serializers.DictField()}
+        "Plan",
+        {
+            "departure": serializers.DateTimeField(),
+            "load_lb": serializers.FloatField(),
+            "interval_mi": serializers.IntegerField(),
+            "routes": serializers.ListField(),
+            "ranking": serializers.DictField(),
+            "departure_options": serializers.DictField(),
+            "notices": serializers.ListField(child=serializers.CharField()),
+            "corridor": serializers.DictField(),
+            "simulation": serializers.DictField(allow_null=True),
+            "assumptions": serializers.DictField(),
+        },
     ),
     description=(
-        "Three route options with checkpoints, forecast risk and a recommendation for each sampling interval."
+        "Up to three route options with checkpoints at the requested interval, forecast risk at each "
+        "arrival time, and the recommended route."
     ),
 )
 @api_view(["POST"])

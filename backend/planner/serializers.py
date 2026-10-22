@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from rest_framework import serializers
 
 from planner.domain.checkpoints import SAMPLING_INTERVALS_MI
+from planner.domain.corridor import MAX_GRID_POINTS
 from planner.domain.geo import haversine_m
 
 MAX_LOAD_LB = 80_000  # US federal gross limit; no legal cargo load exceeds it
@@ -57,7 +58,8 @@ class SuggestQuerySerializer(serializers.Serializer):
     q = serializers.CharField(max_length=120, allow_blank=True)
 
 
-MAX_CORRIDOR_POINTS = 1_000
+# The plan never builds a grid larger than this, and every point costs one forecast request.
+MAX_CORRIDOR_POINTS = MAX_GRID_POINTS
 
 
 class SimulationSerializer(serializers.Serializer):
