@@ -7,7 +7,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import type { RouteOption } from '../api/types.ts'
-import { formatClock, timeZoneName } from '../lib/format.ts'
+import { formatClock, formatPrecip, formatWind, timeZoneName } from '../lib/format.ts'
 import { levelStyle } from '../lib/risk.ts'
 
 interface Props {
@@ -79,13 +79,13 @@ export default function CheckpointTable({ route, interval }: Props) {
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    {cp.forecast ? Math.round(cp.wind_mph!) : '-'}
+                    {cp.forecast ? formatWind(cp.wind_mph!) : '-'}
                   </TableCell>
                   <TableCell align="right">
-                    {cp.forecast ? cp.rain_in_hr!.toFixed(2) : '-'}
+                    {cp.forecast ? formatPrecip(cp.rain_in_hr!) : '-'}
                   </TableCell>
                   <TableCell align="right">
-                    {cp.forecast ? cp.snow_in_hr!.toFixed(2) : '-'}
+                    {cp.forecast ? formatPrecip(cp.snow_in_hr!) : '-'}
                   </TableCell>
                 </TableRow>
               )

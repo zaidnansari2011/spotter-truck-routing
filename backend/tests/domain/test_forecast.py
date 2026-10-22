@@ -32,7 +32,22 @@ def test_mid_hour_uses_the_bucket_ending_after_the_eta():
 
 def test_wind_is_interpolated_between_the_surrounding_hours():
     assert weather_at(series(), T14 + 30 * 60).wind_mph == pytest.approx(15)
-    assert weather_at(series(), T14 + 20 * 60).wind_mph == pytest.approx(10 + 10 / 3)
+    assert weather_at(series(), T14 + 20 * 60).wind_mph == 13.3  # 13.33, at the shown precision
+
+
+def test_wind_is_classified_at_the_precision_it_is_shown():
+    # 34.96 would show as "35.0" next to Moderate; it is rounded first, so it is High.
+    result = weather_at(series(wind_mph=[34.92, 35.0, 0.0]), T14 + 30 * 60)
+
+    assert result.wind_mph == 35.0
+
+
+def test_gust_is_never_below_the_sustained_wind():
+    # Wind interpolated toward the next hour can pass the hour's peak gust.
+    result = weather_at(series(wind_mph=[30.0, 50.0, 0.0], gust_mph=[0.0, 35.0, 0.0]), T14 + 45 * 60)
+
+    assert result.wind_mph == 45.0
+    assert result.gust_mph == 45.0
 
 
 def test_eta_exactly_on_the_hour_uses_that_stamp():

@@ -28,6 +28,18 @@ export function timeZoneName(time: string | number | Date = Date.now()): string 
   return zone.formatToParts(toDate(time)).find((p) => p.type === 'timeZoneName')?.value ?? ''
 }
 
+/**
+ * Weather values at the precision they are classified at (wind 1 decimal, rain and snow up to 3),
+ * so a value never looks like it sits in a different band: 0.248 in/hr is Moderate, not "0.25".
+ */
+export function formatWind(mph: number): string {
+  return mph.toFixed(1)
+}
+
+export function formatPrecip(inches: number): string {
+  return inches.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 })
+}
+
 export function formatAvgRisk(avg: number | null): string {
   return avg === null ? 'n/a' : avg.toFixed(2)
 }

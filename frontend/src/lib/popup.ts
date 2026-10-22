@@ -1,5 +1,5 @@
 import type { Checkpoint } from '../api/types.ts'
-import { formatClock, timeZoneName } from './format.ts'
+import { formatClock, formatPrecip, formatWind, timeZoneName } from './format.ts'
 import { describeLevel, levelColor } from './risk.ts'
 
 const ESCAPES: Record<string, string> = {
@@ -21,9 +21,12 @@ export function checkpointPopupHtml(cp: Checkpoint, routeId: string): string {
   const level = describeLevel(cp.level, cp.factors)
   const rows = cp.forecast
     ? [
-        ['Wind', `${cp.wind_mph} mph${cp.gust_mph != null ? `, gusts ${cp.gust_mph}` : ''}`],
-        ['Rain', `${cp.rain_in_hr?.toFixed(2)} in/hr`],
-        ['Snow', `${cp.snow_in_hr?.toFixed(2)} in/hr`],
+        [
+          'Wind',
+          `${formatWind(cp.wind_mph!)} mph${cp.gust_mph != null ? `, gusts ${formatWind(cp.gust_mph)}` : ''}`,
+        ],
+        ['Rain', `${formatPrecip(cp.rain_in_hr!)} in/hr`],
+        ['Snow', `${formatPrecip(cp.snow_in_hr!)} in/hr`],
       ]
     : []
   const loadRule = cp.load_rule

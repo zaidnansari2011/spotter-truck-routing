@@ -14,15 +14,24 @@ export const HEAT_LAYERS: { id: HeatLayer; label: string; unit: string }[] = [
 
 /**
  * Where each layer's values cross into Moderate, High, Severe and No Travel, in the units the
- * API sends: risk x100, wind mph, rain and snow in hundredths of an inch per hour.
- * Rain and snow No Travel is "more than" 1.00 and 3.0 in/hr, hence 101 and 301.
+ * API sends: risk x100, wind in tenths of a mph, rain and snow in thousandths of an inch per hour.
+ * Rain and snow No Travel is "more than" 1.00 and 3.0 in/hr, hence 1001 and 3001.
  */
 export const THRESHOLDS: Record<HeatLayer, [number, number, number, number]> = {
   risk: [100, 200, 300, 400],
   risk_load: [100, 200, 300, 400],
-  wind: [25, 35, 45, 55],
-  rain: [10, 25, 50, 101],
-  snow: [50, 100, 200, 301],
+  wind: [250, 350, 450, 550],
+  rain: [100, 250, 500, 1001],
+  snow: [500, 1000, 2000, 3001],
+}
+
+/** The factor that turns a layer's API value back into mph or in/hr. */
+export const UNIT_SCALE: Record<HeatLayer, number> = {
+  risk: 100,
+  risk_load: 100,
+  wind: 10,
+  rain: 1000,
+  snow: 1000,
 }
 
 export const FRAME_COUNT = 49

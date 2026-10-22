@@ -45,9 +45,9 @@ def test_frames_cover_hours_0_to_48_for_every_point(fakes):
     for key in ("risk", "risk_load", "wind", "rain", "snow"):
         assert len(data[key]) == len(POINTS)
         assert all(len(row) == 49 for row in data[key])
-    assert data["wind"][0][0] == 30
-    assert data["rain"][0][0] == 30  # hundredths of an inch per hour
-    assert data["snow"][0][0] == 120
+    assert data["wind"][0][0] == 300  # tenths of a mph
+    assert data["rain"][0][0] == 300  # thousandths of an inch per hour
+    assert data["snow"][0][0] == 1200
     assert data["risk"][0][0] // 100 == 2  # High (snow 1.2 in/hr and rain 0.3 in/hr)
 
 
@@ -61,6 +61,17 @@ def test_load_adjusted_layer_differs_only_when_a_load_rule_applies(fakes):
     assert light["risk_load"][0][0] // 100 == 3
     assert heavy["risk_load"][0][0] == 400  # No Travel once the load is over 30,000 lb
     assert heavy["risk"][0][0] == light["risk"][0][0]
+
+
+def test_raw_layers_change_color_where_checkpoints_change_level(fakes):
+    # 0.248 in/hr is Moderate at a checkpoint; in hundredths it would have read 25, the High edge.
+    fakes(weather=FakeWeather(lambda lat, lon: (54.96, 0.248, 0.0)))
+
+    data = corridor(request()).json()
+
+    assert data["rain"][0][0] == 248  # below the High edge of 250
+    assert data["wind"][0][0] == 550  # 55.0 mph at the shown precision: No Travel, as classified
+    assert data["risk"][0][0] == 400
 
 
 def test_hours_without_a_forecast_are_null(fakes):
@@ -78,7 +89,7 @@ def test_hours_without_a_forecast_are_null(fakes):
         {"points": []},
         {"points": [[-100.0]]},
         {"points": [[-100.0, 95.0]]},
-        {"points": [[-100.0, 40.0]] * 1001},
+        {"points": [[-100.0, 40.0]] * 301},  # more than the plan's grid ever has
         {"start": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()},
         {"start": (datetime.now(timezone.utc) + timedelta(days=8)).isoformat()},
         {"load_lb": 90_000},
@@ -109,7 +120,7 @@ def test_corridor_shows_the_demo_storm_when_the_plan_used_one(fakes):
 
     assert max(real["risk"][1]) < 100  # calm
     assert max(simulated["risk"][1]) == 400  # the storm centre is No Travel
-    assert max(simulated["wind"][1]) > 55  # peak winds at the centre (it builds up before hour 0)
+    assert max(simulated["wind"][1]) > 550  # peak winds at the centre (it builds up before hour 0)
 
 
 def test_corridor_rejects_a_bad_simulation_block(fakes):

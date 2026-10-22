@@ -90,9 +90,9 @@ describe('colorExpression', () => {
 
   it('uses each layer’s own thresholds', () => {
     const wind = colorExpression('wind', 0) as unknown[]
-    expect(wind.slice(3, 5)).toEqual([25, LEVELS[1].color])
+    expect(wind.slice(3, 5)).toEqual([250, LEVELS[1].color]) // 25.0 mph in tenths
     const rain = colorExpression('rain', 0) as unknown[]
-    expect(rain.at(-2)).toBe(101) // No Travel is more than 1.00 in/hr
+    expect(rain.at(-2)).toBe(1001) // No Travel is more than 1.000 in/hr
   })
 })
 
@@ -101,7 +101,7 @@ describe('opacityExpression', () => {
     const expr = opacityExpression('snow', 0) as unknown[]
     expect(expr.slice(0, 2)).toEqual(['step', ['get', 'v0']])
     expect(expr[2]).toBe(0) // below the first step
-    expect(expr[3]).toBe(50) // snow Moderate starts at 0.50 in/hr
+    expect(expr[3]).toBe(500) // snow Moderate starts at 0.500 in/hr
   })
 
   it('gets more opaque as conditions get worse', () => {

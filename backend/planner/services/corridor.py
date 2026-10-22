@@ -1,15 +1,16 @@
 """Hourly heatmap frames for the corridor grid: 49 frames covering hours 0 to 48 (DR-019).
 
 Values are small integers to keep the payload compact (the browser divides them back):
-risk indices x100 (0-400), wind in whole mph, rain and snow in hundredths of an inch per hour.
-Hours without a forecast are null, never zero.
+risk indices x100 (0-400), wind in tenths of a mph, rain and snow in thousandths of an inch per
+hour. These are the precisions checkpoints are classified at, so every layer changes color exactly
+where a checkpoint changes level. Hours without a forecast are null, never zero.
 """
 
 from __future__ import annotations
 
 import math
 
-from planner.domain.forecast import HOUR_S, HourlySeries
+from planner.domain.forecast import HOUR_S, PRECIP_DECIMALS, WIND_DECIMALS, HourlySeries
 from planner.domain.geo import LatLon
 from planner.domain.risk import risk_index
 from planner.domain.scenario import SimulatedStorm
@@ -44,12 +45,13 @@ def _frame_values(s: HourlySeries, ts: int, load_lb: float) -> tuple[int | None,
     snow = s.value(s.snowfall_in, ts)
     if None in (wind, rain, showers, snow):
         return (None,) * 5
-    liquid = round(rain + showers, 3)
+    wind = round(wind, WIND_DECIMALS)
+    liquid = round(rain + showers, PRECIP_DECIMALS)
     return (
         # floor keeps floor(value / 100) equal to the discrete level (DR-013)
         math.floor(risk_index(wind, liquid, snow) * 100),
         math.floor(risk_index(wind, liquid, snow, load_lb) * 100),
-        round(wind),
-        round(liquid * 100),
-        round(snow * 100),
+        round(wind * 10),
+        round(liquid * 1000),
+        round(snow * 1000),
     )

@@ -17,6 +17,9 @@ HOUR_S = 3600
 # Open-Meteo reports precipitation in inches to 3 decimals; summing floats (0.01 + 0.09) can land
 # just under a threshold, so sums are rounded back to the source precision.
 PRECIP_DECIMALS = 3
+# Interpolated wind is classified at the precision it is shown (1 decimal), so a checkpoint never
+# reads "35.0 mph" next to Moderate.
+WIND_DECIMALS = 1
 
 
 @dataclass(frozen=True)
@@ -60,9 +63,12 @@ def weather_at(series: HourlySeries, eta_ts: float) -> WeatherAtEta | None:
         return None
 
     fraction = (eta_ts - hour_start) / HOUR_S
+    wind = round(lerp(wind_start, wind_end, fraction), WIND_DECIMALS)
+    gust = series.value(series.gust_mph, hour_end)
     return WeatherAtEta(
-        wind_mph=lerp(wind_start, wind_end, fraction),
-        gust_mph=series.value(series.gust_mph, hour_end),
+        wind_mph=wind,
+        # The hour's peak gust can sit below a wind interpolated from the next hour's value.
+        gust_mph=None if gust is None else max(gust, wind),
         rain_in_hr=round(rain + showers, PRECIP_DECIMALS),
         snow_in_hr=round(snow, PRECIP_DECIMALS),
         hour_ending_ts=hour_end,

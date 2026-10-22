@@ -26,8 +26,16 @@ describe('checkpointPopupHtml', () => {
 
     expect(html).toContain('Route B, mile 75')
     expect(html).toContain('Severe from wind')
-    expect(html).toContain('38.2 mph, gusts 51')
+    expect(html).toContain('38.2 mph, gusts 51.0')
     expect(html).toContain('0.05 in/hr')
+  })
+
+  it('shows values at the precision they are classified at', () => {
+    // 0.248 in/hr is Moderate; rounded to "0.25" it would look like High.
+    const html = checkpointPopupHtml({ ...BASE, wind_mph: 34.9, rain_in_hr: 0.248 }, 'A')
+
+    expect(html).toContain('34.9 mph')
+    expect(html).toContain('0.248 in/hr')
     expect(html).toContain(
       'Raised from High by the load rule: 35-44 mph wind with a load over 40,000 lb.',
     )
