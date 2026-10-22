@@ -169,7 +169,9 @@ export default function MapView({
 
   return (
     <Box sx={{ position: 'absolute', inset: 0, ...mapStyles }}>
-      <Box ref={containerRef} sx={{ position: 'absolute', inset: 0 }} />
+      {/* isolation keeps the trucks' and popups' z-index inside the map, so the legend, demo
+          banner and timeline drawn over it stay on top. */}
+      <Box ref={containerRef} sx={{ position: 'absolute', inset: 0, isolation: 'isolate' }} />
       {children}
     </Box>
   )
