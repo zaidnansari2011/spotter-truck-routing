@@ -50,6 +50,23 @@ Plan a truck trip and see which of three routes is safest to drive. The app chec
    Then the load rules, which can only raise the level: 45 to 54 mph wind with more than 30,000 lb is No Travel, and 35 to 44 mph wind with more than 40,000 lb is Severe.
 5. **Ranking.** Routes are compared in this order, each step only breaking ties in the one before: fewest No Travel miles, fewest Severe miles, fewest High miles, lowest average risk, shortest travel time.
 
+## Where the code is
+
+| Part | Files |
+|---|---|
+| Risk table and load rules | `backend/planner/domain/risk.py` (`Thresholds.classify`, `load_rule_level`, `assess`) |
+| Checkpoints every 10/25/50 mi and their arrival times | `backend/planner/domain/checkpoints.py` (`build_profile`, `checkpoint_miles`, `place_checkpoints`) |
+| Weather at the arrival time | `backend/planner/domain/forecast.py` (`weather_at`) |
+| Ranking and the reason shown for it | `backend/planner/domain/ranking.py` (`RouteScore.sort_key`, `rank`) |
+| The whole plan: routes, checkpoints, forecasts, risk, ranking | `backend/planner/services/trip.py` (`plan_trip`) |
+| TomTom and Open-Meteo clients, caching and batching | `backend/planner/services/tomtom.py`, `backend/planner/services/openmeteo.py` |
+| Heatmap frames | `backend/planner/services/corridor.py`, `backend/planner/domain/corridor.py` |
+| Heatmap on the map (GPU blending between hours) | `frontend/src/lib/heatmap.ts`, `frontend/src/components/useHeatLayer.ts` |
+| Timeline slider and trucks | `frontend/src/components/TimelineBar.tsx`, `frontend/src/components/useTruckLayer.ts`, `frontend/src/lib/trucks.ts` |
+| Map, routes, checkpoints, popups | `frontend/src/components/MapView.tsx`, `frontend/src/lib/mapData.ts`, `frontend/src/lib/popup.ts` |
+
+The domain modules are pure functions with no I/O, so each rule can be read and tested on its own.
+
 ## Assumptions
 
 The brief leaves a few things open. Each choice below is a named constant in the code and has a unit test.
@@ -62,6 +79,7 @@ The brief leaves a few things open. Each choice below is a named constant in the
 | What a mile at a risk level means | Each checkpoint covers half the distance to each neighbor | Miles per level always add up to the route length |
 | Average risk | Distance-weighted, Low 0 to No Travel 4 | Simple and explainable |
 | Which weather values | Sustained wind, rain plus showers (liquid only), snowfall in inches | Total precipitation would count snow twice; gusts are shown but not scored |
+| Precision | Wind is classified at 0.1 mph and rain and snow at 0.001 in/hr, the precision the app shows them at | A checkpoint never reads "35.0 mph" next to Moderate or "0.25 in/hr" next to Moderate ([DR-031](docs/decisions.md#dr-031-pre-submission-audit)) |
 | Forecast missing for a checkpoint | Shown as "No forecast", never as Low; a route with no forecast at all ranks last | Missing data must not look safe ([DR-014](docs/decisions.md#dr-014-routes-without-a-forecast-rank-last)) |
 | Where the 0 to 48 hour slider starts | At departure (which is "now" by default), with a switch to start from now | For a trip leaving tomorrow, the weather it drives through is what matters ([DR-009](docs/decisions.md#dr-009-forecast-slider-start-time)) |
 | Load weight | Cargo weight, 0 to 80,000 lb | It is what the load rules describe |
@@ -88,9 +106,9 @@ Forecasts are cached per 5 km grid cell for 30 minutes, so toggling the timeline
 
 ```
 Browser: React, TypeScript, Material UI, MapLibre GL (WebGL map)
-   |  GET  /api/suggest     place search (cached 24 h)
-   |  POST /api/plan        routes, checkpoints for 10/25/50 mi, risk, rankings, heatmap grid
-   |  POST /api/corridor    49 hourly forecast frames for the heatmap grid
+   |  GET  /api/suggest/    place search (cached 24 h)
+   |  POST /api/plan/       routes, checkpoints at the chosen 10/25/50 mi spacing, risk, ranking, heatmap grid
+   |  POST /api/corridor/   49 hourly forecast frames for the heatmap grid
 Django + Django REST Framework (stateless, no database)
    planner/domain/     pure logic, no I/O: geometry, checkpoints, forecast timing, risk, ranking, corridor grid
    planner/services/   TomTom and Open-Meteo clients, trip planning, heatmap frames
@@ -116,12 +134,12 @@ Rate limits per address: plans 60 an hour, place search 600 an hour, heatmap fra
 
 ## Hosting
 
-Azure Container Apps in Central India: one Docker image, 0.5 vCPU and 1 GiB, at least one replica always running so there is no cold start. The TomTom key and Django secret are Container Apps secrets. The cache is in memory per worker. `deploy/azure-container-apps.sh` builds the image in Azure Container Registry and creates or updates the app ([DR-030](docs/decisions.md#dr-030-hosting-as-deployed)).
+Azure Container Apps in Central India: one Docker image, 0.5 vCPU and 1 GiB, at least one replica always running so there is no cold start. The TomTom key and Django secret are Container Apps secrets. One gunicorn worker with 8 threads, so the in-memory cache and the rate limits are shared by every request on a replica. The built app is served pre-compressed (gzip) with year-long caching for its hashed files. `deploy/azure-container-apps.sh` builds the image in Azure Container Registry and creates or updates the app ([DR-030](docs/decisions.md#dr-030-hosting-as-deployed)).
 
 ## Tests and quality
 
-- **Backend:** 279 pytest tests, 100% branch coverage. Every risk threshold is tested just below and exactly at its edge, as are both load rules (30,000 vs 30,001 lb, 40,000 vs 40,001 lb). Ranking order, arrival-time interpolation and forecast-hour matching have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
-- **Frontend:** 67 Vitest tests for formatting, map geometry and chip placement, popups, the heatmap expressions, the recommendation wording, share links and truck positions.
+- **Backend:** 288 pytest tests, 100% branch coverage. Every risk threshold is tested just below and exactly at its edge, as are both load rules (30,000 vs 30,001 lb, 40,000 vs 40,001 lb). Ranking order, arrival-time interpolation and forecast-hour matching have dedicated tests. TomTom and Open-Meteo are mocked; a test fails if it reaches a live API.
+- **Frontend:** 68 Vitest tests for formatting, map geometry and chip placement, popups, the heatmap expressions, the recommendation wording, share links and truck positions.
 - **Browser checks:** the production build was driven in headless Edge for the example trip, a one-road trip (Key West to Miami), an unroutable trip (Honolulu to Denver), validation errors, phone width and keyboard order, with no console errors. This found and fixed a map-worker bug that only showed in production builds ([DR-021](docs/decisions.md#dr-021-browser-qa-and-the-production-map-worker)).
 - **CI:** GitHub Actions runs ruff, pytest, oxlint, Prettier, Vitest, the TypeScript build and the Docker build on every push to `main` and every pull request.
 

@@ -1,8 +1,8 @@
 # Decision log
 
-Every significant choice in this project, with the options considered, what was tested, the measured results, and why the final option won. Newest entries at the bottom. Measurements were taken from a development machine unless noted, so absolute latencies are indicative.
+Every significant choice in this project, with the options considered, what was tested, the measured results, and why the final option won. Newest entries at the bottom. Measurements were taken from a development machine unless noted, so absolute latencies are indicative. Test counts in each entry are as of that entry; the current totals are in the README.
 
-**Where to start.** For the scoring logic: [DR-006](#dr-006-interpreting-the-risk-table-boundaries) (risk table edges), [DR-007](#dr-007-no-travel-in-the-ranking) (No Travel and miles), [DR-003](#dr-003-checkpoint-etas-from-tomtom-progress-data) and [DR-005](#dr-005-which-weather-fields-and-how-to-align-them-with-etas) (weather at the arrival time), [DR-014](#dr-014-routes-without-a-forecast-rank-last) (missing forecasts). For performance: [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider) and [DR-023](#dr-023-staying-inside-the-free-weather-quota). For the final review: [DR-029](#dr-029-review-against-a-scoring-checklist).
+**Where to start.** For the scoring logic: [DR-006](#dr-006-interpreting-the-risk-table-boundaries) (risk table edges), [DR-007](#dr-007-no-travel-in-the-ranking) (No Travel and miles), [DR-003](#dr-003-checkpoint-etas-from-tomtom-progress-data) and [DR-005](#dr-005-which-weather-fields-and-how-to-align-them-with-etas) (weather at the arrival time), [DR-014](#dr-014-routes-without-a-forecast-rank-last) (missing forecasts). For performance: [DR-020](#dr-020-heatmap-rendering-and-the-timeline-slider) and [DR-023](#dr-023-staying-inside-the-free-weather-quota). For the final review: [DR-029](#dr-029-review-against-a-scoring-checklist) and [DR-031](#dr-031-pre-submission-audit).
 
 | # | Decision | Status |
 |---|---|---|
@@ -35,7 +35,8 @@ Every significant choice in this project, with the options considered, what was 
 | [DR-027](#dr-027-shareable-trip-links) | Shareable trip links | Accepted |
 | [DR-028](#dr-028-layout-and-map-label-review) | Layout and map label review | Accepted |
 | [DR-029](#dr-029-review-against-a-scoring-checklist) | Review against a scoring checklist | Accepted |
-| [DR-030](#dr-030-hosting-as-deployed) | Hosting as deployed | Accepted |
+| [DR-030](#dr-030-hosting-as-deployed) | Hosting as deployed | Accepted, revised by DR-031 |
+| [DR-031](#dr-031-pre-submission-audit) | Pre-submission audit | Accepted |
 
 ---
 
@@ -430,7 +431,7 @@ All risk criteria tie, so travel time decides and A is recommended, as intended.
 **Payload format.** One row per grid point and one value per hour, for hours 0 to 48 (49 frames), as small integers:
 - `risk`: weather-only risk index x100 (0 to 400), the default "weather heatmap" layer
 - `risk_load`: the same with load rules applied, for the "Risk for this load" layer
-- `wind` in whole mph, `rain` and `snow` in hundredths of an inch per hour
+- `wind` in whole mph, `rain` and `snow` in hundredths of an inch per hour (now tenths of a mph and thousandths of an inch, DR-031)
 
 Values are floored, not rounded, so `floor(risk / 100)` always equals the discrete level shown at checkpoints (DR-013). Hours without a forecast are `null`, never 0.
 
@@ -640,6 +641,7 @@ The rest-break note under the switch is now one line.
 | Heatmap agrees with the checkpoints | **Did not.** The default heatmap layer was weather risk without the load rules, while the dots include them. At 35,000 lb in 50 mph wind a dot was No Travel over a Severe-colored area | Default layer is now "Risk for this load"; the other is labelled "Weather only (no load rules)". The legend says the dots show weather when the truck gets there and the shading shows the time on the slider |
 | Real latency, not only call counts | Measured on the hosted app: new trip 5.2 s, repeat 0.6 s, heatmap 1.1 s, three concurrent new trips all done in 5.0 s without errors. Provider failures, timeouts and each kind of rate limit are covered by tests (502, 503 with a retry on the per-minute limit) | Numbers added to the README |
 | Cache policy and what changes with accounts | Expiry per cache is explicit (10 min, 30 min, 24 h); a cache outage is treated as a miss | README now says what a database would look like if saved trips or accounts were added |
+
 ---
 
 ## DR-030: Hosting as deployed
@@ -653,7 +655,7 @@ The rest-break note under the switch is now one line.
 | Region | The Azure for Students subscription only allows Central India, Korea Central, Malaysia West, India South Central and UAE North | Central India. The server calls TomTom and Open-Meteo itself and map tiles come from a CDN, so the region adds little to what a reviewer waits for |
 | Image build | Local Docker was not available | Built in the cloud with `az acr build` (Azure Container Registry, Basic). `.dockerignore` keeps `.env` out of the upload |
 | Environment | The CLI created an "express" Container Apps environment, which does not support custom domains, and the subscription allows only one standard environment, already used by another project | The app runs in that existing standard environment as a separate app in its own resource group, so it can be removed without touching anything else |
-| Cache | Redis would be a second paid service for a stateless app with light traffic | In-memory cache per worker (2 gunicorn workers, 1 replica, up to 2). A cold worker only means one slower first request |
+| Cache | Redis would be a second paid service for a stateless app with light traffic | In-memory cache per worker (2 gunicorn workers, 1 replica, up to 2). A cold worker only means one slower first request. *Revised by DR-031: one worker with 8 threads* |
 | Domain | | `truck-routing.zaidansari.tech`: a CNAME and an `asuid` TXT record, with an Azure managed certificate (HTTPS) |
 
 **Settings.** 0.5 vCPU and 1 GiB, minimum 1 replica so there is never a cold start, maximum 2. The TomTom key and Django secret are Container Apps secrets referenced by environment variables. `DJANGO_DEBUG=false`, allowed hosts limited to the two host names.
@@ -665,3 +667,47 @@ The rest-break note under the switch is now one line.
 **Flaky test found while checking the setup steps.** On a clean clone one storm test failed: the storm is sampled hourly and wind is interpolated to the arrival time, so its peak reaches the truck at 53 to 62 mph depending on the minute the test runs, and the test expected No Travel from wind alone. It now uses a 35,000 lb load (45 to 54 mph is No Travel above 30,000 lb) and runs at four fixed departures, on the hour and at 15, 30 and 45 minutes past. The app's behaviour was correct; only the test depended on the clock.
 
 **Follow-up: demo mode was hard to find.** It was only reachable through `?demo=storm` in the address, so a reviewer on a calm day would see every route Low and never see the rules at work. Now the start screen offers "try it with a simulated storm", "How it works" opens with a link to it, and the demo banner has a "Show real forecasts" link back. Checked in the browser: each link switches mode and the banners follow. The start screen hint goes away once a trip is planned, so the results also offer "Try it in a simulated storm", which reopens the same trip with the storm on.
+
+---
+
+## DR-031: Pre-submission audit
+
+**Why.** A last pass over the four things the work is judged on: the routing, weather and risk logic, the map and timeline performance, code quality, and the docs. Each finding below was reproduced before it was fixed, and each fix has a test or a measurement.
+
+**Logic.**
+
+| Found | Fixed |
+|---|---|
+| A value could look like it sat in a different band: wind 34.96 mph showed as "35" next to Moderate, rain 0.248 in/hr as "0.25" next to Moderate | Wind is rounded to 0.1 mph before it is classified, and every view shows wind to 0.1 mph and rain and snow to up to 0.001 in/hr. All 145 checkpoints of the storm demo were checked against the brief's table from the values on screen |
+| The wind, rain and snow heatmap layers used whole mph and hundredths of an inch, so a layer could change color at a different value than a checkpoint changes level | The corridor sends wind in tenths of a mph and rain and snow in thousandths of an inch, the same precision checkpoints are classified at |
+| A route just over a multiple of the spacing (100.06 mi at 25 mi) left the destination checkpoint covering 0.03 mi. No Travel there rounded to 0.0 miles in the ranking while the route was still badged "Do not travel" | A regular checkpoint within a mile of the destination is left out, so the destination covers a real stretch of road |
+| Gusts are the hour's peak while wind is interpolated toward the next hour, so a gust could read lower than the wind | Gusts are shown as at least the sustained wind |
+| Travel times were compared to the second but shown to the minute ("Shortest travel time: 1 h vs 1 h") | Compared in whole minutes, like the other criteria (DR-008) |
+| A cached forecast hour merged into a newer entry kept being served past its 30 minutes | Each cached hour keeps its own fetch time |
+
+**Performance.** Measured on the production build in Chrome, Chicago to Denver, playback at 2 forecast hours a second, normal CPU and 4x CPU slowdown (a slower laptop).
+
+| Found | Fixed | Before | After |
+|---|---|---|---|
+| The slider's thumb and fill lagged behind playback and stuck after a reset: MUI eases them over 150 ms, and playback sets the value every frame, which restarted the easing each time | Easing turned off on the thumb and track | After 12 s of play the value was 24.75 h and the thumb was drawn at 0.96 h | Within 0.12 h at every sample, and Play after the end starts at 0 h |
+| Trucks were a GeoJSON source updated with `setData` every frame, which makes the map re-tile the source and redo label placement | Trucks are three DOM markers moved with `setLngLat` | 4x: 34 to 38 fps | 4x: 51 to 53 fps, no long tasks |
+| A new heatmap paint expression makes MapLibre rebuild the layer's tiles, and playback set one every frame | The shading moves in quarter-hour steps (the slider's step), and an unchanged step is skipped | about 4 tile rebuilds per frame | 8 a second at 2 h/s |
+| The timeline's toggle, layer menu and arrival flags re-rendered every frame | Memoized | about 130 component renders per frame | the slider and readout only |
+| The panel grew from 127 to 160 px when "Route A has arrived" wrapped the controls, so the slider jumped during playback | Controls share a row with the clock, and the description has two lines reserved | 2 heights | 153 px throughout |
+| The 1.95 MB script was served uncompressed with a 60 s cache | Compressed at build time (561 KB gzipped) and split into app, MUI, MapLibre and vendor files; hashed files are cached for a year | | |
+
+At normal CPU playback holds the display's 165 fps in both cases.
+
+**Behavior.** A checkpoint popup now closes when the route or plan changes. Changing the spacing keeps the driver's zoom (the map only re-frames when the roads change). Playback stops while the timeline reloads, and a new trip starts its timeline at hour 0. Phones get a one-line risk legend, and checkpoint dots have a dark ring so yellow stays visible on the light basemap.
+
+**Security and hosting.**
+
+| Found | Fixed |
+|---|---|
+| The per-address rate limit keyed on the whole `X-Forwarded-For` header, so a client could add any address to it and get a fresh limit | `NUM_PROXIES = 1` (the Container Apps ingress is the only proxy), with a test that two spoofed headers share one limit |
+| `/api/corridor/` accepted 1,000 points while a plan's grid never has more than 300, and every point costs one forecast request | Capped at the grid's 300 |
+| Two gunicorn workers each had their own cache and rate-limit counts | One worker with 8 threads; the work is mostly waiting on TomTom and Open-Meteo |
+| `check --deploy` warnings | Added the clickjacking middleware and HSTS |
+| The API docs page listed a `rankings` field the API does not return | The schema lists the real top-level fields |
+
+**Checks.** 288 backend tests at 100% line and branch coverage, 68 frontend tests, ruff, oxlint, Prettier and the TypeScript build pass.
