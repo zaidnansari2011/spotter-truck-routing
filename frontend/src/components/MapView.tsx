@@ -378,6 +378,8 @@ const mapStyles = {
   '& .truck-marker[data-recommended="true"]': { background: tokens.signGreen },
   '& .truck-marker[data-state="waiting"]': { opacity: 0.55 },
   '& .truck-marker[data-state="arrived"]': { display: 'none' },
+  // A checkpoint popup sits above the trucks and route chips.
+  '& .maplibregl-popup': { zIndex: 2 },
   '& .maplibregl-popup-content': {
     font: `14px/1.4 ${fontFamily}`,
     color: tokens.asphalt,
