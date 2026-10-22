@@ -259,11 +259,51 @@ def test_rate_limit_without_json_body(client, sleeps):
 
 
 @respx.mock
-def test_network_failure_is_a_weather_error(client):
+def test_network_failure_is_a_weather_error_after_one_retry(client, sleeps):
     FORECAST_URL.mock(side_effect=httpx.ConnectTimeout("down"))
 
     with pytest.raises(WeatherError, match="ConnectTimeout"):
         client.hourly(cells(1), NOW, NOW + H)
+    assert FORECAST_URL.call_count == 2
+    assert sleeps == [1.0]
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "blip",
+    [
+        httpx.ReadTimeout("slow"),
+        httpx.Response(502, text="Bad Gateway"),
+        httpx.Response(503, json={"reason": "busy"}),
+    ],
+)
+def test_a_brief_failure_is_retried_once(client, sleeps, blip):
+    FORECAST_URL.mock(side_effect=[blip, respond_with_window])
+
+    result = client.hourly(cells(1), NOW, NOW + H)
+
+    assert FORECAST_URL.call_count == 2
+    assert sleeps == [1.0]
+    assert result[cells(1)[0]].wind_mph == [10.0, 10.0]
+
+
+@respx.mock
+def test_a_server_error_that_persists_is_reported(client, sleeps):
+    FORECAST_URL.mock(return_value=httpx.Response(500, json={"reason": "internal"}))
+
+    with pytest.raises(WeatherError, match="HTTP 500"):
+        client.hourly(cells(1), NOW, NOW + H)
+    assert FORECAST_URL.call_count == 2
+
+
+@respx.mock
+def test_a_client_error_is_not_retried(client, sleeps):
+    FORECAST_URL.mock(return_value=httpx.Response(400, json={"reason": "bad parameter"}))
+
+    with pytest.raises(WeatherError, match="bad parameter"):
+        client.hourly(cells(1), NOW, NOW + H)
+    assert FORECAST_URL.call_count == 1
+    assert sleeps == []
 
 
 @respx.mock

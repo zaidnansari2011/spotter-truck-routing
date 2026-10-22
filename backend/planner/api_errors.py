@@ -40,6 +40,9 @@ def api_exception_handler(exc, context):
             "no_route",
             "No truck route exists between these places. Check that both are reachable by road.",
         )
+    if isinstance(exc, TomTomError | WeatherError):
+        # Upstream failures are not bugs, but the reason must reach the logs to be diagnosed.
+        logger.warning("Upstream failure: %s", exc)
     if isinstance(exc, TomTomError):
         return _error(
             status.HTTP_502_BAD_GATEWAY,

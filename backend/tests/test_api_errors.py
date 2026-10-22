@@ -5,8 +5,16 @@ from django.test import override_settings
 
 from planner.api_errors import api_exception_handler
 from planner.services import trip
-from planner.services.openmeteo import OpenMeteoClient
+from planner.services.openmeteo import OpenMeteoClient, WeatherError
 from planner.services.tomtom import TomTomClient, TomTomError
+
+
+def test_upstream_failures_are_logged_with_their_reason(caplog):
+    response = api_exception_handler(WeatherError("Open-Meteo returned HTTP 504: unknown"), {})
+
+    assert response.status_code == 502
+    assert "HTTP 504" not in str(response.data)  # the reason stays out of the response
+    assert "Upstream failure: Open-Meteo returned HTTP 504" in caplog.text
 
 
 def test_unexpected_errors_are_logged_and_hidden(caplog):

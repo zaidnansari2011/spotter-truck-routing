@@ -7,6 +7,7 @@ forecast.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -26,7 +27,11 @@ MAX_WORKERS = 4
 MAX_FORECAST_DAYS = 16
 CACHE_SECONDS = 30 * 60  # models update hourly
 MINUTE_S = 60
+TRANSIENT_RETRIES = 1
+TRANSIENT_RETRY_WAIT_S = 1.0
 CACHE_VERSION = 2
+
+logger = logging.getLogger(__name__)
 
 Cell = tuple[float, float]
 
@@ -133,10 +138,24 @@ class OpenMeteoClient:
         return {cell: _hours(location["hourly"]) for cell, location in zip(cells, locations, strict=True)}
 
     def _get(self, params: dict) -> httpx.Response:
-        try:
-            return self._http.get(BASE_URL, params=params)
-        except httpx.HTTPError as exc:
-            raise WeatherError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
+        """One GET, retried once after a short wait when it times out, drops or gets a 5xx.
+
+        The free API has brief blips; without the retry one of them fails a whole plan.
+        """
+        for attempt in range(TRANSIENT_RETRIES + 1):
+            last = attempt == TRANSIENT_RETRIES
+            try:
+                response = self._http.get(BASE_URL, params=params)
+            except httpx.HTTPError as exc:
+                if last:
+                    raise WeatherError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
+                logger.warning("Open-Meteo request failed (%s); retrying", exc.__class__.__name__)
+            else:
+                if response.status_code < 500 or last:
+                    return response
+                logger.warning("Open-Meteo returned HTTP %s; retrying", response.status_code)
+            self._sleep(TRANSIENT_RETRY_WAIT_S)
+        raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _hours(hourly: dict) -> dict[int, tuple]:
