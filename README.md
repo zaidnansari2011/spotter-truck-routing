@@ -2,7 +2,7 @@
 
 Plan a truck trip and see which of three routes is safest to drive. The app checks the forecast at the moment the truck reaches each point on each route, applies the load-weight rules, and recommends a route by weather risk and travel time.
 
-**Live app:** [truck-routing.zaidansari.tech](https://truck-routing.zaidansari.tech) &nbsp;|&nbsp; **Walkthrough video:** [youtu.be/fgwt4Uy7aRE](https://youtu.be/fgwt4Uy7aRE)
+**Live app:** [truck-routing.zaidansari.tech](https://truck-routing.zaidansari.tech) &nbsp;|&nbsp; **Walkthrough video:** [youtu.be/WWNo1DjGrxA](https://youtu.be/WWNo1DjGrxA)
 
 **Jump to:** [how routes are compared](#how-the-recommendation-is-made) | [run it locally](#run-it-locally) | [tests](#tests-and-quality) | [decision log](docs/decisions.md)
 
